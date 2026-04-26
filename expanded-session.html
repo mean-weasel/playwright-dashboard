@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expanded Session View — Native macOS App Mockup</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --window-bg: #1e1e1e;
+      --sidebar-bg: #252526;
+      --titlebar-bg: #2d2d2d;
+      --border: #3c3c3c;
+      --border-subtle: #333333;
+      --text: #cccccc;
+      --text-bright: #e8e8e8;
+      --text-secondary: #969696;
+      --text-muted: #5a5a5a;
+      --accent: #0a84ff;
+      --accent-subtle: rgba(10,132,255,0.12);
+      --green: #32d74b;
+      --green-subtle: rgba(50,215,75,0.12);
+      --yellow: #ffd60a;
+      --yellow-subtle: rgba(255,214,10,0.1);
+      --red: #ff453a;
+      --red-subtle: rgba(255,69,58,0.1);
+      --purple: #bf5af2;
+      --purple-subtle: rgba(191,90,242,0.12);
+      --selection: rgba(10,132,255,0.2);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      background: #111111;
+      min-height: 100vh;
+      padding: 30px;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      margin-top: 40px;
+    }
+
+    .section-label:first-of-type {
+      margin-top: 0;
+    }
+
+    .section-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      max-width: 700px;
+    }
+
+    /* ============================================================
+       NSWindow chrome
+       ============================================================ */
+    .nswindow {
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+      background: var(--window-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 1px rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    .titlebar {
+      height: 38px;
+      background: var(--titlebar-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 8px;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+      margin-right: 8px;
+    }
+
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tl.close { background: #ff5f57; }
+    .tl.minimize { background: #febc2e; }
+    .tl.maximize { background: #28c840; }
+
+    .tb-back {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .tb-back:hover { background: var(--accent-subtle); }
+    .tb-back svg { width: 12px; height: 12px; }
+
+    .tb-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+    .tb-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .tb-spacer { flex: 1; }
+
+    .tb-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .tb-btn:hover { background: var(--border-subtle); color: var(--text-bright); }
+    .tb-btn.primary { background: var(--accent-subtle); border-color: transparent; color: var(--accent); }
+    .tb-btn.primary:hover { background: rgba(10,132,255,0.2); }
+
+    /* ============================================================
+       EXPANDED VIEW 1: Full session with live screencast
+       ============================================================ */
+    .expanded-body {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      height: 580px;
+    }
+
+    .expanded-main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .screencast-full {
+      flex: 1;
+      background: #0a0a12;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .screencast-full .sf-browser {
+      width: 92%;
+      height: 88%;
+      background: #12121e;
+      border-radius: 8px;
+      border: 1px solid #2a2a3a;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sf-browser .sf-toolbar {
+      height: 32px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a2a3a;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+    }
+
+    .sf-toolbar .sf-dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .sf-toolbar .sf-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .sf-toolbar .sf-dot.r { background: #ff5f57; }
+    .sf-toolbar .sf-dot.y { background: #febc2e; }
+    .sf-toolbar .sf-dot.g { background: #28c840; }
+
+    .sf-toolbar .sf-urlbar {
+      flex: 1;
+      background: #0f0f1a;
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #7b8caa;
+      font-family: 'SF Mono', monospace;
+    }
+
+    .sf-toolbar .sf-tab-count {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: #2a2a3a;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .sf-browser .sf-content {
+      flex: 1;
+      background: #0f0f1a;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .sf-content .sf-nav {
+      display: flex;
+      gap: 8px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e1e30;
+    }
+
+    .sf-content .sf-nav-item {
+      font-size: 11px;
+      color: #5a6a8a;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .sf-content .sf-nav-item.active {
+      background: #1e1e30;
+      color: #8899bb;
+    }
+
+    .sf-content .sf-heading {
+      font-size: 16px;
+      font-weight: 600;
+      color: #c8d4e8;
+    }
+
+    .sf-content .sf-table {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .sf-content .sf-table-header {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 80px;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #141420;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #5a6a8a;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .sf-content .sf-table-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 80px;
+      gap: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #8899bb;
+      border-radius: 4px;
+    }
+
+    .sf-content .sf-table-row:nth-child(even) {
+      background: rgba(20,20,40,0.5);
+    }
+
+    .sf-content .sf-table-row .email { color: #6ba3f7; }
+    .sf-content .sf-table-row .badge-active {
+      background: rgba(50,215,75,0.15);
+      color: var(--green);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 600;
+      width: fit-content;
+    }
+    .sf-content .sf-table-row .badge-inactive {
+      background: rgba(255,255,255,0.05);
+      color: #5a6a8a;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      width: fit-content;
+    }
+
+    /* Live indicator */
+    .live-indicator {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(0,0,0,0.7);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .live-indicator .pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Screenshot overlay controls */
+    .screencast-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      background: rgba(0,0,0,0.75);
+      padding: 4px 6px;
+      border-radius: 6px;
+      backdrop-filter: blur(8px);
+    }
+
+    .sc-btn {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sc-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-bright); }
+    .sc-btn svg { width: 12px; height: 12px; }
+
+    /* Right panel: session detail + tabs + console */
+    .expanded-panel {
+      border-left: 1px solid var(--border-subtle);
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .ep-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--titlebar-bg);
+    }
+
+    .ep-tab {
+      padding: 8px 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+
+    .ep-tab:hover { color: var(--text-secondary); }
+    .ep-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .ep-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .ep-section {
+      margin-bottom: 16px;
+    }
+
+    .ep-section-title {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .ep-field {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3px 0;
+      gap: 8px;
+    }
+
+    .ep-field-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .ep-field-value {
+      font-size: 10px;
+      color: var(--text-bright);
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ep-field-value.mono {
+      font-family: 'SF Mono', monospace;
+      font-size: 9px;
+      color: var(--text-secondary);
+    }
+
+    .ep-field-value.editable {
+      color: var(--accent);
+      cursor: pointer;
+      border-bottom: 1px dashed var(--accent);
+    }
+
+    .ep-field-value .inline-badge {
+      font-size: 8px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    .ep-field-value .inline-badge.purple { background: var(--purple); color: #fff; }
+    .ep-field-value .inline-badge.gray { background: var(--border); color: var(--text-secondary); font-family: 'SF Mono', monospace; font-weight: 400; }
+
+    .ep-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 12px 0;
+    }
+
+    /* Tab list in panel */
+    .ep-tab-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ep-tab-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      cursor: default;
+    }
+
+    .ep-tab-row:hover { background: rgba(255,255,255,0.04); }
+    .ep-tab-row.active-tab { background: var(--selection); color: var(--text-bright); }
+
+    .ep-tab-row .tab-favicon {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .ep-tab-row .tab-title {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ep-tab-row .tab-url {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-family: 'SF Mono', monospace;
+    }
+
+    /* Console section */
+    .ep-console {
+      background: #1a1a1a;
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 6px 8px;
+      font-family: 'SF Mono', monospace;
+      font-size: 9px;
+      max-height: 120px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .console-line {
+      display: flex;
+      gap: 6px;
+      padding: 1px 0;
+    }
+
+    .console-line .cl-level {
+      flex-shrink: 0;
+      width: 30px;
+      font-weight: 600;
+    }
+
+    .console-line .cl-level.log { color: var(--text-muted); }
+    .console-line .cl-level.warn { color: var(--yellow); }
+    .console-line .cl-level.error { color: var(--red); }
+
+    .console-line .cl-msg {
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Bottom actions bar */
+    .ep-actions {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .ep-action-btn {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .ep-action-btn:hover { background: var(--border-subtle); color: var(--text-bright); }
+    .ep-action-btn.primary { background: var(--accent-subtle); border-color: transparent; color: var(--accent); }
+    .ep-action-btn.danger { border-color: transparent; color: var(--red); }
+    .ep-action-btn.danger:hover { background: var(--red-subtle); }
+
+    /* ============================================================
+       DETACHED MINI-WINDOW (floating session)
+       ============================================================ */
+    .mini-window-scene {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .mini-window {
+      width: 420px;
+      background: var(--window-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+
+    .mini-titlebar {
+      height: 28px;
+      background: var(--titlebar-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 6px;
+    }
+
+    .mini-titlebar .traffic-lights { gap: 5px; }
+    .mini-titlebar .tl { width: 10px; height: 10px; }
+
+    .mini-titlebar .mt-title {
+      font-size: 11px;
+      color: var(--text-bright);
+      font-weight: 500;
+      flex: 1;
+      text-align: center;
+    }
+
+    .mini-titlebar .mt-pip {
+      font-size: 9px;
+      color: var(--text-muted);
+      background: var(--border-subtle);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .mini-screen {
+      aspect-ratio: 16/10;
+      background: #0a0a12;
+      position: relative;
+    }
+
+    .mini-screen .ms-page {
+      position: absolute;
+      inset: 0;
+      padding: 6px;
+    }
+
+    .mini-screen .ms-bar {
+      height: 16px;
+      background: #1a1a2e;
+      border-radius: 3px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      gap: 4px;
+    }
+
+    .mini-screen .ms-bar .ms-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .mini-screen .ms-bar .ms-dot.r { background: #ff5f57; }
+    .mini-screen .ms-bar .ms-dot.y { background: #febc2e; }
+    .mini-screen .ms-bar .ms-dot.g { background: #28c840; }
+
+    .mini-screen .ms-bar .ms-url {
+      font-size: 8px;
+      color: #5a6a8a;
+      margin-left: 4px;
+      font-family: 'SF Mono', monospace;
+    }
+
+    .mini-screen .ms-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 4px;
+    }
+
+    .mini-screen .ms-line {
+      height: 6px;
+      background: #141a2e;
+      border-radius: 2px;
+    }
+
+    .mini-screen .ms-line.s { width: 35%; }
+    .mini-screen .ms-line.m { width: 60%; }
+    .mini-screen .ms-line.l { width: 85%; }
+
+    .mini-screen .ms-live {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0,0,0,0.7);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 9px;
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .mini-screen .ms-live .pulse {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    .mini-footer {
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 10px;
+    }
+
+    .mini-footer .mf-name {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .mini-footer .mf-meta {
+      color: var(--text-muted);
+      font-family: 'SF Mono', monospace;
+      font-size: 9px;
+    }
+
+    /* Annotation */
+    .annotation {
+      margin-top: 32px;
+      max-width: 1000px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 16px;
+      background: var(--sidebar-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+    }
+
+    .annotation h3 {
+      font-size: 13px;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .annotation-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .annotation-col h4 {
+      font-size: 11px;
+      color: var(--text-bright);
+      margin-bottom: 6px;
+    }
+
+    .annotation-col ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .annotation-col li {
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding-left: 12px;
+      position: relative;
+    }
+
+    .annotation-col li::before {
+      content: '>';
+      position: absolute;
+      left: 0;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- EXPANDED SESSION: Full view when you double-click a card -->
+  <div class="section-label">Expanded Session — double-click card or press Space</div>
+  <div class="section-desc">The grid view zooms into a single session. Back button (or Esc) returns to the grid. Live screencast fills the left, session detail + tabs + console on the right.</div>
+
+  <div class="nswindow">
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <div class="tl close"></div>
+        <div class="tl minimize"></div>
+        <div class="tl maximize"></div>
+      </div>
+      <div class="tb-back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        All Sessions
+      </div>
+      <span class="tb-title">Admin UX audit</span>
+      <span class="tb-subtitle">admin-ux-25c2</span>
+      <div class="tb-spacer"></div>
+      <button class="tb-btn">Detach Window</button>
+      <button class="tb-btn primary">Attach in Terminal</button>
+    </div>
+
+    <div class="expanded-body">
+      <!-- Live screencast -->
+      <div class="expanded-main">
+        <div class="screencast-full">
+          <div class="live-indicator">
+            <span class="pulse"></span>
+            LIVE
+          </div>
+
+          <div class="sf-browser">
+            <div class="sf-toolbar">
+              <div class="sf-dots">
+                <span class="sf-dot r"></span>
+                <span class="sf-dot y"></span>
+                <span class="sf-dot g"></span>
+              </div>
+              <div class="sf-urlbar">localhost:3000/admin/users</div>
+              <span class="sf-tab-count">3 tabs</span>
+            </div>
+            <div class="sf-content">
+              <div class="sf-nav">
+                <span class="sf-nav-item">Dashboard</span>
+                <span class="sf-nav-item active">Users</span>
+                <span class="sf-nav-item">Events</span>
+                <span class="sf-nav-item">Settings</span>
+              </div>
+              <div class="sf-heading">User Management</div>
+              <div class="sf-table">
+                <div class="sf-table-header">
+                  <span>Email</span>
+                  <span>Role</span>
+                  <span>Status</span>
+                  <span>Actions</span>
+                </div>
+                <div class="sf-table-row">
+                  <span class="email">alice@example.com</span>
+                  <span>Admin</span>
+                  <span><span class="badge-active">Active</span></span>
+                  <span>Edit</span>
+                </div>
+                <div class="sf-table-row">
+                  <span class="email">bob@example.com</span>
+                  <span>Editor</span>
+                  <span><span class="badge-active">Active</span></span>
+                  <span>Edit</span>
+                </div>
+                <div class="sf-table-row">
+                  <span class="email">charlie@example.com</span>
+                  <span>Viewer</span>
+                  <span><span class="badge-inactive">Inactive</span></span>
+                  <span>Edit</span>
+                </div>
+                <div class="sf-table-row">
+                  <span class="email">dana@example.com</span>
+                  <span>Editor</span>
+                  <span><span class="badge-active">Active</span></span>
+                  <span>Edit</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="screencast-controls">
+            <div class="sc-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              Screenshot
+            </div>
+            <div class="sc-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+              Record GIF
+            </div>
+            <div class="sc-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Refresh
+            </div>
+            <div class="sc-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+              Open CDP
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right panel with tabs -->
+      <div class="expanded-panel">
+        <div class="ep-tabs">
+          <div class="ep-tab active">Info</div>
+          <div class="ep-tab">Tabs</div>
+          <div class="ep-tab">Console</div>
+          <div class="ep-tab">Network</div>
+        </div>
+
+        <div class="ep-content">
+          <!-- Info tab content -->
+          <div class="ep-section">
+            <div class="ep-section-title">Session</div>
+            <div class="ep-field">
+              <span class="ep-field-label">Name</span>
+              <span class="ep-field-value editable">Admin UX audit</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">ID</span>
+              <span class="ep-field-value mono">admin-ux-25c2</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Status</span>
+              <span class="ep-field-value" style="color:var(--green)">Active</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Uptime</span>
+              <span class="ep-field-value mono">14m 22s</span>
+            </div>
+          </div>
+
+          <div class="ep-divider"></div>
+
+          <div class="ep-section">
+            <div class="ep-section-title">Browser</div>
+            <div class="ep-field">
+              <span class="ep-field-label">URL</span>
+              <span class="ep-field-value mono">localhost:3000/admin/users</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Title</span>
+              <span class="ep-field-value">Admin — User Management</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">CDP Port</span>
+              <span class="ep-field-value mono">55318</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Engine</span>
+              <span class="ep-field-value mono">Chromium 131</span>
+            </div>
+          </div>
+
+          <div class="ep-divider"></div>
+
+          <div class="ep-section">
+            <div class="ep-section-title">Owner</div>
+            <div class="ep-field">
+              <span class="ep-field-label">Workspace</span>
+              <span class="ep-field-value mono">deckchecker/admin-ux-audit</span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Instance</span>
+              <span class="ep-field-value"><span class="inline-badge purple">Claude</span></span>
+            </div>
+            <div class="ep-field">
+              <span class="ep-field-label">Pane</span>
+              <span class="ep-field-value"><span class="inline-badge gray">tmux %14</span> window 3</span>
+            </div>
+          </div>
+
+          <div class="ep-divider"></div>
+
+          <div class="ep-section">
+            <div class="ep-section-title">Tabs (3)</div>
+            <div class="ep-tab-list">
+              <div class="ep-tab-row active-tab">
+                <span class="tab-favicon"></span>
+                <span class="tab-title">Admin — User Management</span>
+              </div>
+              <div class="ep-tab-row">
+                <span class="tab-favicon"></span>
+                <span class="tab-title">Admin — Events</span>
+              </div>
+              <div class="ep-tab-row">
+                <span class="tab-favicon"></span>
+                <span class="tab-title">Login — Deckchecker</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ep-divider"></div>
+
+          <div class="ep-section">
+            <div class="ep-section-title">Console (recent)</div>
+            <div class="ep-console">
+              <div class="console-line"><span class="cl-level log">LOG</span><span class="cl-msg">[next] compiled in 245ms</span></div>
+              <div class="console-line"><span class="cl-level log">LOG</span><span class="cl-msg">fetching /api/users?page=1</span></div>
+              <div class="console-line"><span class="cl-level warn">WARN</span><span class="cl-msg">deprecated: use getServerSession()</span></div>
+              <div class="console-line"><span class="cl-level log">LOG</span><span class="cl-msg">render: UserTable (14 rows)</span></div>
+              <div class="console-line"><span class="cl-level error">ERR</span><span class="cl-msg">Failed to load avatar for user_38a</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ep-actions">
+          <button class="ep-action-btn primary">Attach</button>
+          <button class="ep-action-btn">Screenshot</button>
+          <button class="ep-action-btn">Navigate</button>
+          <button class="ep-action-btn danger">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETACHED MINI-WINDOW -->
+  <div class="section-label" style="margin-top:50px;">Detached Window — via "Detach Window" or &#x2318;&#x21E7;D</div>
+  <div class="section-desc">Pop any session into its own floating always-on-top mini-window. Useful for watching a session while you work in another app. Picture-in-picture for browser sessions.</div>
+
+  <div class="mini-window-scene">
+    <div class="mini-window">
+      <div class="mini-titlebar">
+        <div class="traffic-lights">
+          <div class="tl close"></div>
+          <div class="tl minimize"></div>
+          <div class="tl maximize"></div>
+        </div>
+        <span class="mt-title">Admin UX audit</span>
+        <span class="mt-pip">PiP</span>
+      </div>
+      <div class="mini-screen">
+        <div class="ms-live"><span class="pulse"></span> LIVE</div>
+        <div class="ms-page">
+          <div class="ms-bar">
+            <span class="ms-dot r"></span><span class="ms-dot y"></span><span class="ms-dot g"></span>
+            <span class="ms-url">localhost:3000/admin/users</span>
+          </div>
+          <div class="ms-lines">
+            <div class="ms-line s"></div>
+            <div class="ms-line l"></div>
+            <div class="ms-line m"></div>
+            <div class="ms-line l"></div>
+            <div class="ms-line s"></div>
+            <div class="ms-line m"></div>
+            <div class="ms-line l"></div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-footer">
+        <span class="mf-name">Admin UX audit</span>
+        <span class="mf-meta">%14 &middot; deckchecker</span>
+      </div>
+    </div>
+
+    <div class="mini-window" style="width:320px;">
+      <div class="mini-titlebar">
+        <div class="traffic-lights">
+          <div class="tl close"></div>
+          <div class="tl minimize"></div>
+          <div class="tl maximize"></div>
+        </div>
+        <span class="mt-title">Middleware test</span>
+        <span class="mt-pip">PiP</span>
+      </div>
+      <div class="mini-screen">
+        <div class="ms-live"><span class="pulse"></span> LIVE</div>
+        <div class="ms-page">
+          <div class="ms-bar">
+            <span class="ms-dot r"></span><span class="ms-dot y"></span><span class="ms-dot g"></span>
+            <span class="ms-url">localhost:4321/api/health</span>
+          </div>
+          <div class="ms-lines">
+            <div class="ms-line s"></div>
+            <div class="ms-line m"></div>
+            <div class="ms-line s"></div>
+            <div class="ms-line l"></div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-footer">
+        <span class="mf-name">Middleware test</span>
+        <span class="mf-meta">%31 &middot; seatify</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div class="annotation">
+    <h3>Interaction flow — how views connect</h3>
+    <div class="annotation-grid">
+      <div class="annotation-col">
+        <h4>Navigation</h4>
+        <ul>
+          <li>Menubar click > popover (compact list)</li>
+          <li>Popover "Open Dashboard" > full NSWindow grid</li>
+          <li>Grid double-click card > expanded view (this page)</li>
+          <li>"Detach Window" > floating PiP mini-window</li>
+          <li>Esc or back arrow > returns to grid</li>
+          <li>All views share one process, instant transitions</li>
+        </ul>
+      </div>
+      <div class="annotation-col">
+        <h4>Expanded view features</h4>
+        <ul>
+          <li>Live CDP screencast (real-time page updates)</li>
+          <li>Right panel tabs: Info, Tabs, Console, Network</li>
+          <li>Console shows live browser logs (filterable)</li>
+          <li>Screencast bar: screenshot, record GIF, refresh</li>
+          <li>"Open CDP" opens Chrome DevTools Protocol inspector</li>
+          <li>Click any browser tab to switch active view</li>
+          <li>Rename inline by clicking the name</li>
+          <li>PiP windows are always-on-top, resizable</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

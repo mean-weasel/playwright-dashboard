@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playwright Sessions — Native macOS App Mockup</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --window-bg: #1e1e1e;
+      --sidebar-bg: #252526;
+      --titlebar-bg: #2d2d2d;
+      --border: #3c3c3c;
+      --border-subtle: #333333;
+      --text: #cccccc;
+      --text-bright: #e8e8e8;
+      --text-secondary: #969696;
+      --text-muted: #5a5a5a;
+      --accent: #0a84ff;
+      --accent-subtle: rgba(10,132,255,0.12);
+      --green: #32d74b;
+      --green-subtle: rgba(50,215,75,0.12);
+      --yellow: #ffd60a;
+      --yellow-subtle: rgba(255,214,10,0.1);
+      --red: #ff453a;
+      --red-subtle: rgba(255,69,58,0.1);
+      --purple: #bf5af2;
+      --purple-subtle: rgba(191,90,242,0.12);
+      --selection: rgba(10,132,255,0.2);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      background: #111111;
+      min-height: 100vh;
+      padding: 30px;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page-title {
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+
+    .page-title span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       SECTION 1: Menubar + Popover
+       ============================================================ */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      margin-top: 40px;
+    }
+
+    .section-label:first-of-type {
+      margin-top: 0;
+    }
+
+    .menubar-scene {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .macos-menubar {
+      width: 100%;
+      max-width: 900px;
+      height: 24px;
+      background: rgba(40,40,40,0.92);
+      backdrop-filter: blur(20px);
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 14px;
+      gap: 18px;
+      font-size: 12px;
+      font-weight: 450;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .mb-left {
+      margin-right: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-weight: 600;
+    }
+
+    .mb-icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .mb-app-icon {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .mb-badge {
+      background: var(--accent);
+      color: #fff;
+      font-size: 8px;
+      font-weight: 700;
+      width: 13px;
+      height: 13px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Popover */
+    .popover-scene {
+      display: flex;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    .popover {
+      width: 360px;
+      background: var(--window-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 25px 70px rgba(0,0,0,0.6), 0 0 1px rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+
+    .popover-header {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      gap: 8px;
+    }
+
+    .popover-header-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+    .popover-header-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+    }
+
+    .ph-btn {
+      font-size: 10px;
+      color: var(--accent);
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .ph-btn:hover {
+      background: var(--accent-subtle);
+    }
+
+    .popover-summary {
+      display: flex;
+      gap: 14px;
+      padding: 8px 12px;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .ps-stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .ps-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .ps-dot.g { background: var(--green); }
+    .ps-dot.y { background: var(--yellow); }
+
+    .ps-num { font-weight: 600; color: var(--text-bright); }
+
+    .popover-list {
+      max-height: 350px;
+      overflow-y: auto;
+    }
+
+    .pl-group-header {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      padding: 8px 12px 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pl-group-header .gi {
+      width: 11px;
+      height: 11px;
+      border-radius: 2px;
+      background: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7px;
+      font-weight: 800;
+      color: var(--text-secondary);
+    }
+
+    .pl-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 12px;
+      cursor: default;
+      border-radius: 5px;
+      margin: 0 4px;
+    }
+
+    .pl-row:hover {
+      background: var(--selection);
+    }
+
+    .pl-thumb {
+      width: 48px;
+      height: 32px;
+      border-radius: 4px;
+      background: #111;
+      border: 1px solid var(--border-subtle);
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .pl-thumb .t-bar {
+      height: 5px;
+      background: #1a1a2e;
+      font-size: 4px;
+      padding: 0 2px;
+      color: #555;
+      display: flex;
+      align-items: center;
+    }
+
+    .pl-thumb .t-lines {
+      padding: 2px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .pl-thumb .t-line {
+      height: 2px;
+      background: #1e293b;
+      border-radius: 1px;
+    }
+
+    .pl-thumb .t-line.s { width: 30%; }
+    .pl-thumb .t-line.m { width: 55%; }
+    .pl-thumb .t-line.l { width: 80%; }
+
+    .pl-thumb.blank {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 8px;
+    }
+
+    .pl-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pl-name {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pl-name .custom { color: var(--accent); }
+    .pl-name .autoid { color: var(--text-muted); font-size: 9px; font-weight: 400; }
+
+    .pl-url {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pl-badges {
+      display: flex;
+      gap: 3px;
+      margin-top: 3px;
+    }
+
+    .pb {
+      font-size: 8px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    .pb.claude { background: var(--purple); color: #fff; }
+    .pb.pane { background: var(--border); color: var(--text-secondary); font-family: 'SF Mono', monospace; font-weight: 400; font-size: 8px; }
+    .pb.active { background: var(--green-subtle); color: var(--green); }
+    .pb.idle { background: var(--yellow-subtle); color: var(--yellow); }
+
+    .pl-actions {
+      display: flex;
+      gap: 2px;
+      opacity: 0;
+    }
+
+    .pl-row:hover .pl-actions {
+      opacity: 1;
+    }
+
+    .pl-act {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .pl-act:hover { background: var(--border); color: var(--text-bright); }
+    .pl-act.danger:hover { background: var(--red-subtle); color: var(--red); }
+    .pl-act svg { width: 10px; height: 10px; }
+
+    .popover-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 12px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--sidebar-bg);
+    }
+
+    .pf-link {
+      font-size: 10px;
+      color: var(--accent);
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .pf-text {
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    /* ============================================================
+       SECTION 2: Dashboard Window (NSWindow)
+       ============================================================ */
+    .window-scene {
+      margin-top: 16px;
+    }
+
+    .nswindow {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--window-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 1px rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    /* Titlebar */
+    .titlebar {
+      height: 38px;
+      background: var(--titlebar-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 8px;
+      -webkit-app-region: drag;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+      margin-right: 8px;
+    }
+
+    .tl {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .tl.close { background: #ff5f57; }
+    .tl.minimize { background: #febc2e; }
+    .tl.maximize { background: #28c840; }
+
+    .titlebar-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-left: 4px;
+    }
+
+    .titlebar-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
+    .titlebar-spacer { flex: 1; }
+
+    .titlebar-btn {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 5px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+    }
+
+    .titlebar-btn:hover {
+      background: var(--border);
+      color: var(--text-bright);
+    }
+
+    .titlebar-btn.active {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-color: transparent;
+    }
+
+    /* Window body */
+    .window-body {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      height: 600px;
+    }
+
+    /* Sidebar (source list style) */
+    .source-list {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border-subtle);
+      padding: 8px 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sl-section {
+      margin-bottom: 12px;
+    }
+
+    .sl-header {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 4px 14px;
+    }
+
+    .sl-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: default;
+      border-radius: 5px;
+      margin: 0 6px;
+    }
+
+    .sl-item:hover {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .sl-item.selected {
+      background: var(--selection);
+      color: var(--text-bright);
+    }
+
+    .sl-item .sl-icon {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sl-item .sl-icon svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .sl-item .sl-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .sl-item .sl-count {
+      margin-left: auto;
+      font-size: 10px;
+      color: var(--text-muted);
+      background: var(--border-subtle);
+      padding: 1px 5px;
+      border-radius: 8px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    .sl-item.selected .sl-count {
+      background: rgba(10,132,255,0.2);
+      color: var(--accent);
+    }
+
+    .sl-workspace-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      background: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 800;
+      color: var(--text-secondary);
+    }
+
+    .sl-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 8px 14px;
+    }
+
+    .sl-bottom {
+      margin-top: auto;
+      padding: 0 6px;
+    }
+
+    .sl-bottom .sl-item {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* Main content area */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      padding: 8px 14px;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(45,45,45,0.5);
+    }
+
+    .toolbar-search {
+      flex: 1;
+      max-width: 220px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 5px 8px 5px 26px;
+      font-size: 11px;
+      color: var(--text);
+      outline: none;
+      position: relative;
+    }
+
+    .toolbar-search-wrap {
+      position: relative;
+      flex: 1;
+      max-width: 220px;
+    }
+
+    .toolbar-search-wrap svg {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 11px;
+      height: 11px;
+      color: var(--text-muted);
+    }
+
+    .toolbar-search-wrap input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      padding: 5px 8px 5px 24px;
+      font-size: 11px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .toolbar-search-wrap input:focus {
+      border-color: var(--accent);
+      background: rgba(10,132,255,0.05);
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    .toolbar-seg {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .toolbar-seg-btn {
+      padding: 4px 10px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+      background: transparent;
+    }
+
+    .toolbar-seg-btn:last-child { border-right: none; }
+
+    .toolbar-seg-btn.active {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+
+    .toolbar-seg-btn:hover:not(.active) {
+      background: rgba(255,255,255,0.04);
+    }
+
+    /* Grid */
+    .grid-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+
+    .card {
+      background: var(--sidebar-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: default;
+      transition: all 0.15s;
+      position: relative;
+    }
+
+    .card:hover {
+      border-color: var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 4px 12px rgba(10,132,255,0.2);
+    }
+
+    .card-drag {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.1s;
+      cursor: grab;
+      z-index: 2;
+    }
+
+    .card:hover .card-drag { opacity: 1; }
+
+    .card-drag svg { width: 8px; height: 8px; color: var(--text-muted); }
+
+    .card-screen {
+      width: 100%;
+      aspect-ratio: 16/10;
+      background: #0a0a12;
+      position: relative;
+    }
+
+    .card-screen .cs-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 14px;
+      background: rgba(20,20,35,0.9);
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      gap: 3px;
+    }
+
+    .card-screen .cs-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+    }
+
+    .card-screen .cs-dot.r { background: #ff5f57; }
+    .card-screen .cs-dot.y { background: #febc2e; }
+    .card-screen .cs-dot.g { background: #28c840; }
+
+    .card-screen .cs-url {
+      font-size: 7px;
+      color: #5a6a8a;
+      margin-left: 6px;
+    }
+
+    .card-screen .cs-content {
+      position: absolute;
+      top: 14px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .card-screen .cs-line {
+      height: 5px;
+      background: #141a2e;
+      border-radius: 2px;
+    }
+
+    .card-screen .cs-line.s { width: 35%; }
+    .card-screen .cs-line.m { width: 60%; }
+    .card-screen .cs-line.l { width: 85%; }
+
+    .card-screen.blank {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-screen.blank::after {
+      content: 'about:blank';
+      color: #2a2a40;
+      font-size: 9px;
+    }
+
+    .card-screen .idle-badge {
+      position: absolute;
+      top: 20px;
+      right: 6px;
+      background: rgba(0,0,0,0.75);
+      color: var(--yellow);
+      font-size: 8px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .card-screen .idle-badge svg { width: 9px; height: 9px; }
+
+    .card-body {
+      padding: 9px 10px;
+    }
+
+    .card-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .card-name .cn-label { color: var(--accent); }
+    .card-name .cn-id { color: var(--text-muted); font-weight: 400; font-size: 9px; }
+
+    .card-name .cn-status {
+      margin-left: auto;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    .card-name .cn-status.open { background: var(--green-subtle); color: var(--green); }
+    .card-name .cn-status.idle { background: var(--yellow-subtle); color: var(--yellow); }
+
+    .card-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .card-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .card-meta-row svg {
+      width: 10px;
+      height: 10px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .card-meta-row .cmr-value {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-meta-row .cmr-badge {
+      font-size: 8px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    .card-meta-row .cmr-badge.claude { background: var(--purple); color: #fff; }
+    .card-meta-row .cmr-badge.pane { background: var(--border); color: var(--text-secondary); font-family: 'SF Mono', monospace; font-weight: 400; }
+
+    .card-actions {
+      display: flex;
+      gap: 3px;
+      padding: 6px 10px;
+      border-top: 1px solid var(--border-subtle);
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+
+    .card:hover .card-actions { opacity: 1; }
+
+    .ca-btn {
+      font-size: 9px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      background: var(--border-subtle);
+      color: var(--text-secondary);
+      cursor: pointer;
+      border: none;
+    }
+
+    .ca-btn:hover { background: var(--border); color: var(--text-bright); }
+    .ca-btn.danger:hover { background: var(--red-subtle); color: var(--red); }
+
+    /* Inspector panel (right side detail) */
+    .detail-panel {
+      width: 260px;
+      border-left: 1px solid var(--border-subtle);
+      background: var(--sidebar-bg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    .dp-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .dp-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 8px;
+    }
+
+    .dp-field-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .dp-field-value {
+      font-size: 11px;
+      color: var(--text-bright);
+      word-break: break-all;
+    }
+
+    .dp-field-value.mono {
+      font-family: 'SF Mono', monospace;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .dp-field-value .editable {
+      color: var(--accent);
+      border-bottom: 1px dashed var(--accent);
+      cursor: pointer;
+    }
+
+    .dp-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: auto;
+    }
+
+    .dp-action-btn {
+      width: 100%;
+      padding: 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .dp-action-btn:hover {
+      background: var(--border-subtle);
+      color: var(--text-bright);
+    }
+
+    .dp-action-btn.primary {
+      background: var(--accent-subtle);
+      border-color: transparent;
+      color: var(--accent);
+    }
+
+    .dp-action-btn.primary:hover {
+      background: rgba(10,132,255,0.2);
+    }
+
+    .dp-action-btn.danger {
+      color: var(--red);
+      border-color: transparent;
+    }
+
+    .dp-action-btn.danger:hover {
+      background: var(--red-subtle);
+    }
+
+    /* Responsive layout for window body with detail panel */
+    .window-body-with-detail {
+      display: grid;
+      grid-template-columns: 200px 1fr 260px;
+      height: 600px;
+    }
+
+    /* Keyboard shortcut hints */
+    .shortcut-hints {
+      margin-top: 24px;
+      max-width: 1100px;
+      margin-left: auto;
+      margin-right: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .shortcut-card {
+      background: var(--sidebar-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .shortcut-card h4 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+    }
+
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .shortcut-key {
+      font-family: 'SF Mono', monospace;
+      font-size: 9px;
+      background: var(--border-subtle);
+      padding: 2px 5px;
+      border-radius: 3px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SECTION 1: Menubar Popover -->
+  <div class="section-label">Menubar Popover — click the monitor icon in menubar</div>
+
+  <div class="menubar-scene">
+    <div class="macos-menubar">
+      <div class="mb-left">
+        <svg class="mb-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 21.99 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.1 21.99C7.79 22.03 6.8 20.68 5.96 19.47C4.25 16.99 2.97 12.5 4.7 9.56C5.55 8.1 7.06 7.18 8.71 7.16C9.99 7.14 11.2 8.03 11.98 8.03C12.76 8.03 14.23 6.96 15.79 7.12C16.44 7.15 18.18 7.39 19.28 9.01C19.19 9.07 17.07 10.32 17.09 12.88C17.12 15.96 19.79 16.96 19.82 16.97C19.8 17.03 19.39 18.49 18.71 19.5Z"/></svg>
+        <span>Finder</span>
+      </div>
+      <span class="mb-app-icon">
+        <svg class="mb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+        <span class="mb-badge">6</span>
+      </span>
+      <span style="font-size:11px;color:var(--text-secondary)">Sat 2:47 PM</span>
+    </div>
+
+    <div class="popover-scene">
+      <div class="popover">
+        <div class="popover-header">
+          <span class="popover-header-title">Playwright Sessions</span>
+          <div class="popover-header-actions">
+            <span class="ph-btn">Close All</span>
+            <span class="ph-btn" style="font-weight:600;">Open Dashboard</span>
+          </div>
+        </div>
+
+        <div class="popover-summary">
+          <div class="ps-stat"><span class="ps-dot g"></span><span class="ps-num">4</span> active</div>
+          <div class="ps-stat"><span class="ps-dot y"></span><span class="ps-num">2</span> idle</div>
+          <div class="ps-stat" style="margin-left:auto;color:var(--text-muted)">3 workspaces</div>
+        </div>
+
+        <div class="popover-list">
+          <div class="pl-group-header"><span class="gi">D</span> deckchecker</div>
+
+          <div class="pl-row">
+            <div class="pl-thumb">
+              <div class="t-bar">localhost:3000</div>
+              <div class="t-lines"><div class="t-line s"></div><div class="t-line l"></div><div class="t-line m"></div></div>
+            </div>
+            <div class="pl-info">
+              <div class="pl-name"><span class="custom">Admin UX audit</span><span class="autoid">admin-ux-25c2</span></div>
+              <div class="pl-url">localhost:3000/admin/users</div>
+              <div class="pl-badges"><span class="pb claude">Claude</span><span class="pb pane">%14</span><span class="pb active">active</span></div>
+            </div>
+            <div class="pl-actions">
+              <div class="pl-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
+              <div class="pl-act danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+            </div>
+          </div>
+
+          <div class="pl-row">
+            <div class="pl-thumb">
+              <div class="t-bar">localhost:3000</div>
+              <div class="t-lines"><div class="t-line m"></div><div class="t-line l"></div><div class="t-line s"></div></div>
+            </div>
+            <div class="pl-info">
+              <div class="pl-name"><span class="custom">Session detail</span><span class="autoid">ux-sessi-e164</span></div>
+              <div class="pl-url">localhost:3000/sessions/abc123</div>
+              <div class="pl-badges"><span class="pb claude">Claude</span><span class="pb pane">%22</span><span class="pb active">active</span></div>
+            </div>
+            <div class="pl-actions">
+              <div class="pl-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
+              <div class="pl-act danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+            </div>
+          </div>
+
+          <div class="pl-row">
+            <div class="pl-thumb blank">—</div>
+            <div class="pl-info">
+              <div class="pl-name">issuectl-b033</div>
+              <div class="pl-url" style="color:var(--text-muted)">about:blank — opened 3m ago</div>
+              <div class="pl-badges"><span class="pb claude">Claude</span><span class="pb pane">%8</span><span class="pb idle">idle</span></div>
+            </div>
+            <div class="pl-actions">
+              <div class="pl-act danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+            </div>
+          </div>
+
+          <div class="pl-group-header"><span class="gi">S</span> seatify</div>
+
+          <div class="pl-row">
+            <div class="pl-thumb">
+              <div class="t-bar">localhost:4321</div>
+              <div class="t-lines"><div class="t-line s"></div><div class="t-line m"></div></div>
+            </div>
+            <div class="pl-info">
+              <div class="pl-name"><span class="custom">Middleware test</span><span class="autoid">fix-midd-bcb8</span></div>
+              <div class="pl-url">localhost:4321/api/health</div>
+              <div class="pl-badges"><span class="pb claude">Claude</span><span class="pb pane">%31</span><span class="pb active">active</span></div>
+            </div>
+            <div class="pl-actions">
+              <div class="pl-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
+              <div class="pl-act danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+            </div>
+          </div>
+
+          <div class="pl-row">
+            <div class="pl-thumb">
+              <div class="t-bar">localhost:4321</div>
+              <div class="t-lines"><div class="t-line l"></div><div class="t-line l"></div><div class="t-line m"></div></div>
+            </div>
+            <div class="pl-info">
+              <div class="pl-name">seatify-9877</div>
+              <div class="pl-url">localhost:4321/events?page=2</div>
+              <div class="pl-badges"><span class="pb claude">Claude</span><span class="pb pane">%31</span><span class="pb active">active</span></div>
+            </div>
+            <div class="pl-actions">
+              <div class="pl-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>
+              <div class="pl-act danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="popover-footer">
+          <span class="pf-link">Open Dashboard &#x2318;D</span>
+          <span class="pf-text">Updated just now</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Full Dashboard Window -->
+  <div class="section-label">Dashboard Window — opened via "Open Dashboard" or &#x2318;D</div>
+
+  <div class="window-scene">
+    <div class="nswindow">
+      <div class="titlebar">
+        <div class="traffic-lights">
+          <div class="tl close"></div>
+          <div class="tl minimize"></div>
+          <div class="tl maximize"></div>
+        </div>
+        <span class="titlebar-title">Playwright Sessions</span>
+        <span class="titlebar-subtitle">— 6 active across 3 workspaces</span>
+        <div class="titlebar-spacer"></div>
+        <button class="titlebar-btn active">Grid</button>
+        <button class="titlebar-btn">List</button>
+      </div>
+
+      <div class="window-body-with-detail">
+        <!-- Source list sidebar -->
+        <div class="source-list">
+          <div class="sl-section">
+            <div class="sl-header">Status</div>
+            <div class="sl-item selected">
+              <span class="sl-icon"><span class="sl-dot" style="background:var(--green)"></span></span>
+              All active
+              <span class="sl-count">6</span>
+            </div>
+            <div class="sl-item">
+              <span class="sl-icon"><span class="sl-dot" style="background:var(--yellow)"></span></span>
+              Idle / blank
+              <span class="sl-count">2</span>
+            </div>
+          </div>
+
+          <div class="sl-divider"></div>
+
+          <div class="sl-section">
+            <div class="sl-header">Workspaces</div>
+            <div class="sl-item">
+              <span class="sl-workspace-icon">D</span>
+              deckchecker
+              <span class="sl-count">3</span>
+            </div>
+            <div class="sl-item">
+              <span class="sl-workspace-icon">S</span>
+              seatify
+              <span class="sl-count">2</span>
+            </div>
+            <div class="sl-item">
+              <span class="sl-workspace-icon">I</span>
+              issuectl
+              <span class="sl-count">1</span>
+            </div>
+          </div>
+
+          <div class="sl-divider"></div>
+
+          <div class="sl-section">
+            <div class="sl-header">Claude Instances</div>
+            <div class="sl-item">
+              <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg></span>
+              admin-ux-audit
+              <span class="sl-count">1</span>
+            </div>
+            <div class="sl-item">
+              <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg></span>
+              qa-planner
+              <span class="sl-count">1</span>
+            </div>
+            <div class="sl-item">
+              <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg></span>
+              fix-middleware
+              <span class="sl-count">2</span>
+            </div>
+          </div>
+
+          <div class="sl-bottom">
+            <div class="sl-divider"></div>
+            <div class="sl-item">
+              <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+              Settings
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid content -->
+        <div class="content-area">
+          <div class="toolbar">
+            <div class="toolbar-search-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" placeholder="Filter sessions... (&#x2318;F)">
+            </div>
+            <div class="toolbar-spacer"></div>
+            <div class="toolbar-seg">
+              <div class="toolbar-seg-btn active">All</div>
+              <div class="toolbar-seg-btn">Active</div>
+              <div class="toolbar-seg-btn">Idle</div>
+            </div>
+          </div>
+
+          <div class="grid-area">
+            <!-- Card 1 — selected -->
+            <div class="card selected">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen">
+                <div class="cs-bar"><span class="cs-dot r"></span><span class="cs-dot y"></span><span class="cs-dot g"></span><span class="cs-url">localhost:3000/admin/users</span></div>
+                <div class="cs-content"><div class="cs-line s"></div><div class="cs-line l"></div><div class="cs-line m"></div><div class="cs-line l"></div><div class="cs-line s"></div></div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  <span class="cn-label">Admin UX audit</span>
+                  <span class="cn-id">admin-ux-25c2</span>
+                  <span class="cn-status open">active</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">deckchecker / admin-ux-audit</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %14</span>
+                  </div>
+                </div>
+              </div>
+              <div class="card-actions">
+                <button class="ca-btn">Rename</button>
+                <button class="ca-btn">Screenshot</button>
+                <button class="ca-btn">Attach</button>
+                <button class="ca-btn danger">Close</button>
+              </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="card">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen">
+                <div class="cs-bar"><span class="cs-dot r"></span><span class="cs-dot y"></span><span class="cs-dot g"></span><span class="cs-url">localhost:3000/sessions/abc123</span></div>
+                <div class="cs-content"><div class="cs-line m"></div><div class="cs-line l"></div><div class="cs-line s"></div><div class="cs-line l"></div><div class="cs-line m"></div></div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  <span class="cn-label">Session detail</span>
+                  <span class="cn-id">ux-sessi-e164</span>
+                  <span class="cn-status open">active</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">deckchecker / ux-session-detail</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %22</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3 — idle -->
+            <div class="card">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen blank">
+                <div class="idle-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                  No navigation
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  issuectl-b033
+                  <span class="cn-status idle">idle 3m</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">deckchecker / qa-planner</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %8</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="card">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen">
+                <div class="cs-bar"><span class="cs-dot r"></span><span class="cs-dot y"></span><span class="cs-dot g"></span><span class="cs-url">localhost:4321/api/health</span></div>
+                <div class="cs-content"><div class="cs-line s"></div><div class="cs-line m"></div><div class="cs-line s"></div></div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  <span class="cn-label">Middleware test</span>
+                  <span class="cn-id">fix-midd-bcb8</span>
+                  <span class="cn-status open">active</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">seatify</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %31</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 5 — blank/stale -->
+            <div class="card">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen blank">
+                <div class="idle-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                  Possibly orphaned
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  qa-plann-267d
+                  <span class="cn-status idle">blank</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">deckchecker / qa-planner</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %8</span>
+                    <span style="color:var(--yellow);font-size:8px;margin-left:2px;">same pane as issuectl</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 6 -->
+            <div class="card">
+              <div class="card-drag"><svg viewBox="0 0 10 10" fill="currentColor"><circle cx="3" cy="2" r="1"/><circle cx="7" cy="2" r="1"/><circle cx="3" cy="5" r="1"/><circle cx="7" cy="5" r="1"/><circle cx="3" cy="8" r="1"/><circle cx="7" cy="8" r="1"/></svg></div>
+              <div class="card-screen">
+                <div class="cs-bar"><span class="cs-dot r"></span><span class="cs-dot y"></span><span class="cs-dot g"></span><span class="cs-url">localhost:4321/events?page=2</span></div>
+                <div class="cs-content"><div class="cs-line l"></div><div class="cs-line l"></div><div class="cs-line m"></div><div class="cs-line l"></div></div>
+              </div>
+              <div class="card-body">
+                <div class="card-name">
+                  seatify-9877
+                  <span class="cn-status open">active</span>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    <span class="cmr-value">seatify</span>
+                  </div>
+                  <div class="card-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 8h4"/></svg>
+                    <span class="cmr-badge claude">Claude</span>
+                    <span class="cmr-badge pane">tmux %31</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail / Inspector panel (shown when a card is selected) -->
+        <div class="detail-panel">
+          <div>
+            <div class="dp-section-title">Session</div>
+            <div class="dp-field">
+              <span class="dp-field-label">Custom Name</span>
+              <span class="dp-field-value"><span class="editable">Admin UX audit</span></span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">Session ID</span>
+              <span class="dp-field-value mono">admin-ux-25c2</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">Status</span>
+              <span class="dp-field-value" style="color:var(--green)">Active — page loaded</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">Started</span>
+              <span class="dp-field-value mono">12m ago (2:35 PM)</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="dp-section-title">Browser</div>
+            <div class="dp-field">
+              <span class="dp-field-label">URL</span>
+              <span class="dp-field-value mono">localhost:3000/admin/users</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">Page Title</span>
+              <span class="dp-field-value">Admin — User Management</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">CDP Port</span>
+              <span class="dp-field-value mono">55318</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="dp-section-title">Owner</div>
+            <div class="dp-field">
+              <span class="dp-field-label">Workspace</span>
+              <span class="dp-field-value mono">deckchecker/.claude/worktrees/admin-ux-audit</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">Claude Instance</span>
+              <span class="dp-field-value" style="color:var(--purple)">admin-ux-audit agent</span>
+            </div>
+            <div class="dp-field">
+              <span class="dp-field-label">tmux Pane</span>
+              <span class="dp-field-value mono">%14 (window 3, pane 1)</span>
+            </div>
+          </div>
+
+          <div class="dp-actions">
+            <button class="dp-action-btn primary">Attach in Terminal</button>
+            <button class="dp-action-btn">Take Screenshot</button>
+            <button class="dp-action-btn">Copy CDP URL</button>
+            <button class="dp-action-btn danger">Close Session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts reference -->
+  <div class="shortcut-hints">
+    <div class="shortcut-card">
+      <h4>Global (menubar)</h4>
+      <div class="shortcut-row"><span>Toggle popover</span><span class="shortcut-key">&#x2318;&#x21E7;P</span></div>
+      <div class="shortcut-row"><span>Open dashboard</span><span class="shortcut-key">&#x2318;D</span></div>
+      <div class="shortcut-row"><span>Close all sessions</span><span class="shortcut-key">&#x2318;&#x21E7;W</span></div>
+    </div>
+    <div class="shortcut-card">
+      <h4>Dashboard</h4>
+      <div class="shortcut-row"><span>Search / filter</span><span class="shortcut-key">&#x2318;F</span></div>
+      <div class="shortcut-row"><span>Rename selected</span><span class="shortcut-key">Enter</span></div>
+      <div class="shortcut-row"><span>Close selected</span><span class="shortcut-key">&#x232B;</span></div>
+      <div class="shortcut-row"><span>Attach to selected</span><span class="shortcut-key">&#x2318;Enter</span></div>
+      <div class="shortcut-row"><span>Navigate grid</span><span class="shortcut-key">&#x2190; &#x2191; &#x2192; &#x2193;</span></div>
+    </div>
+    <div class="shortcut-card">
+      <h4>Session card</h4>
+      <div class="shortcut-row"><span>Quick screenshot</span><span class="shortcut-key">S</span></div>
+      <div class="shortcut-row"><span>Copy attach cmd</span><span class="shortcut-key">&#x2318;C</span></div>
+      <div class="shortcut-row"><span>Open in inspector</span><span class="shortcut-key">Space</span></div>
+      <div class="shortcut-row"><span>Detach to window</span><span class="shortcut-key">&#x2318;&#x21E7;D</span></div>
+    </div>
+  </div>
+
+</body>
+</html>
