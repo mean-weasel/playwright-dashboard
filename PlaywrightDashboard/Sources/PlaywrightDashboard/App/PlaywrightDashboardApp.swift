@@ -1,40 +1,40 @@
-import SwiftUI
-import SwiftData
 import AppKit
+import SwiftData
+import SwiftUI
 
 @main
 struct PlaywrightDashboardApp: App {
-    @State private var appState = AppState()
+  @State private var appState = AppState()
 
-    private var activeSessionCount: Int {
-        appState.sessions.filter { $0.status != .closed }.count
+  private var activeSessionCount: Int {
+    appState.sessions.filter { $0.status != .closed }.count
+  }
+
+  var body: some Scene {
+    MenuBarExtra {
+      MenubarPopover()
+        .environment(appState)
+    } label: {
+      Label(
+        "Playwright Dashboard",
+        systemImage: activeSessionCount > 0
+          ? "\(min(activeSessionCount, 50)).circle"
+          : "display"
+      )
     }
+    .menuBarExtraStyle(.window)
+    .modelContainer(for: SessionRecord.self)
 
-    var body: some Scene {
-        MenuBarExtra {
-            MenubarPopover()
-                .environment(appState)
-        } label: {
-            Label(
-                "Playwright Dashboard",
-                systemImage: activeSessionCount > 0
-                    ? "\(min(activeSessionCount, 50)).circle"
-                    : "display"
-            )
+    Window("Playwright Dashboard", id: "dashboard") {
+      DashboardWindow()
+        .environment(appState)
+        .onAppear {
+          appState.isDashboardOpen = true
+          NSApplication.shared.setActivationPolicy(.regular)
+          NSApplication.shared.activate(ignoringOtherApps: true)
         }
-        .menuBarExtraStyle(.window)
-        .modelContainer(for: SessionRecord.self)
-
-        Window("Playwright Dashboard", id: "dashboard") {
-            DashboardWindow()
-                .environment(appState)
-                .onAppear {
-                    appState.isDashboardOpen = true
-                    NSApplication.shared.setActivationPolicy(.regular)
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                }
-        }
-        .modelContainer(for: SessionRecord.self)
-        .defaultSize(width: 1100, height: 700)
     }
+    .modelContainer(for: SessionRecord.self)
+    .defaultSize(width: 1100, height: 700)
+  }
 }
