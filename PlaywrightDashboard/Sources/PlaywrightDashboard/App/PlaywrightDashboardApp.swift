@@ -11,10 +11,21 @@ struct PlaywrightDashboardApp: App {
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
+    private var activeSessionCount: Int {
+        appState.sessions.filter { $0.status != .closed }.count
+    }
+
     var body: some Scene {
-        MenuBarExtra("Playwright Dashboard", systemImage: "display") {
+        MenuBarExtra {
             MenubarPopover()
                 .environment(appState)
+        } label: {
+            Label(
+                "Playwright Dashboard",
+                systemImage: activeSessionCount > 0
+                    ? "\(activeSessionCount).circle"
+                    : "display"
+            )
         }
         .menuBarExtraStyle(.window)
         .modelContainer(for: SessionRecord.self)
