@@ -55,6 +55,26 @@ final class SessionRecord {
     self.lastActivityAt = lastActivityAt
   }
 
+  /// Display name shown in UI, preferring user-set custom name over auto-generated label.
+  var displayName: String {
+    customName ?? autoLabel
+  }
+
+  /// Updates session fields from a CDP screenshot result.
+  /// Centralizes status derivation so the logic isn't duplicated across services.
+  func updateFromScreenshot(_ result: CDPClient.ScreenshotResult) {
+    lastScreenshot = result.jpeg
+    lastURL = result.url
+    lastTitle = result.title
+    lastActivityAt = Date()
+
+    if let url = result.url, !url.isEmpty, url != "about:blank" {
+      status = .active
+    } else {
+      status = .idle
+    }
+  }
+
   /// Extracts the project/app name from a workspace directory path.
   /// Looks for `.claude/worktrees/` or `.worktrees/` markers and returns
   /// the directory before them. Falls back to the last path component.
