@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+import OSLog
+
+private let logger = Logger(subsystem: "PlaywrightDashboard", category: "DaemonWatcher")
 
 /// Watches the playwright daemon directory for `.session` file changes.
 /// Provides an observable list of session file URLs that SwiftUI views can react to.
@@ -89,11 +92,15 @@ final class DaemonWatcher {
         var found: [URL] = []
 
         // Enumerate subdirectories (workspace hashes)
-        guard let hashDirs = try? fileManager.contentsOfDirectory(
-            at: baseURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
+        let hashDirs: [URL]
+        do {
+            hashDirs = try fileManager.contentsOfDirectory(
+                at: baseURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            logger.error("Cannot read daemon directory: \(error.localizedDescription)")
             sessionFiles = []
             return
         }

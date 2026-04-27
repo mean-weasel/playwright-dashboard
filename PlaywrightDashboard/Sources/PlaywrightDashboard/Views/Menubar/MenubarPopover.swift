@@ -1,8 +1,20 @@
 import SwiftUI
 
+private struct ContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct MenubarPopover: View {
     @Environment(AppState.self) private var appState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.modelContext) private var modelContext
+    @State private var listContentHeight: CGFloat = 0
+    @AppStorage("popoverGroupByApp") private var groupByApp = true
+
+    private let maxListHeight: CGFloat = 480
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,34 +41,52 @@ struct MenubarPopover: View {
                 .padding(.vertical, 10)
         }
         .frame(width: 300)
+        .task {
+            appState.startSync(modelContext: modelContext)
+        }
     }
 
     // MARK: - Subviews
 
     private var summaryStrip: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 7, height: 7)
-                Text("\(activeSessions.count) active")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 7, height: 7)
+                    Text("\(activeSessions.count) active")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 7, height: 7)
+                    Text("\(idleSessions.count) idle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if !staleSessions.isEmpty {
+                    Text("Clean up")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
             }
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: 7, height: 7)
-                Text("\(idleSessions.count) idle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+            Picker("View", selection: Binding(
+                get: { groupByApp },
+                set: { newValue in
+                    groupByApp = newValue
+                    listContentHeight = 0
+                }
+            )) {
+                Label("By App", systemImage: "folder").tag(true)
+                Label("All", systemImage: "list.bullet").tag(false)
             }
-            Spacer()
-            if !staleSessions.isEmpty {
-                Text("Clean up")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 
@@ -72,13 +102,23 @@ struct MenubarPopover: View {
 
     private var sessionList: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(groupedWorkspaces, id: \.key) { workspace, sessions in
-                    workspaceSection(name: workspace, sessions: sessions)
+            VStack(alignment: .leading, spacing: 0) {
+                if groupByApp {
+                    ForEach(groupedWorkspaces, id: \.key) { workspace, sessions in
+                        workspaceSection(name: workspace, sessions: sessions)
+                    }
+                } else {
+                    ForEach(nonClosedSessions.sorted(by: { ($0.customName ?? $0.autoLabel) < ($1.customName ?? $1.autoLabel) }), id: \.sessionId) { session in
+                        sessionRow(session)
+                    }
                 }
             }
+            .background(GeometryReader { geo in
+                Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
+            })
         }
-        .frame(maxHeight: 280)
+        .frame(height: min(listContentHeight, maxListHeight))
+        .onPreferenceChange(ContentHeightKey.self) { listContentHeight = $0 }
     }
 
     private func workspaceSection(name: String, sessions: [SessionRecord]) -> some View {
@@ -166,7 +206,7 @@ struct MenubarPopover: View {
     }
 
     private var groupedWorkspaces: [(key: String, value: [SessionRecord])] {
-        let grouped = Dictionary(grouping: nonClosedSessions) { $0.workspaceName }
+        let grouped = Dictionary(grouping: nonClosedSessions) { $0.projectName }
         return grouped.sorted { $0.key < $1.key }
     }
 }

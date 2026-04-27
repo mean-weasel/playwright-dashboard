@@ -22,22 +22,22 @@ struct SessionCard: View {
                     .font(.headline)
                     .lineLimit(1)
 
-                Text(session.sessionId)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(session.workspaceName)
+                    Text(AutoLabeler.titleCase(workspaceName: session.workspaceName))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
-                StatusBadge(status: session.status)
+                if let url = session.lastURL, !url.isEmpty, url != "about:blank" {
+                    Text(url)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(10)
         }

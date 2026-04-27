@@ -3,13 +3,13 @@ import Foundation
 
 @Model
 final class SessionRecord {
-    #Unique<SessionRecord>([\.sessionId])
 
     var sessionId: String          // e.g., "admin-ux-25c2"
     var customName: String?        // user-set label
     var autoLabel: String          // derived from worktree + URL
     var workspaceDir: String       // from .session file
     var workspaceName: String      // last path component of workspaceDir
+    var projectName: String        // parent project (before .worktrees/ or .claude/worktrees/)
     var cdpPort: Int               // extracted from launch args
     var socketPath: String         // for playwright-cli communication
     var gridOrder: Int             // manual drag ordering
@@ -42,6 +42,7 @@ final class SessionRecord {
         self.autoLabel = autoLabel
         self.workspaceDir = workspaceDir
         self.workspaceName = URL(fileURLWithPath: workspaceDir).lastPathComponent
+        self.projectName = Self.extractProjectName(from: workspaceDir)
         self.cdpPort = cdpPort
         self.socketPath = socketPath
         self.gridOrder = gridOrder
@@ -52,5 +53,19 @@ final class SessionRecord {
         self.createdAt = createdAt
         self.closedAt = closedAt
         self.lastActivityAt = lastActivityAt
+    }
+
+    /// Extracts the project/app name from a workspace directory path.
+    /// Looks for `.claude/worktrees/` or `.worktrees/` markers and returns
+    /// the directory before them. Falls back to the last path component.
+    static func extractProjectName(from path: String) -> String {
+        let markers = ["/.claude/worktrees/", "/.worktrees/"]
+        for marker in markers {
+            if let range = path.range(of: marker) {
+                let projectPath = String(path[path.startIndex..<range.lowerBound])
+                return URL(fileURLWithPath: projectPath).lastPathComponent
+            }
+        }
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 }

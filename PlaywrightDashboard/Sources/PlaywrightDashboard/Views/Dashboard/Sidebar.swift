@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SidebarFilter: Hashable {
-    case allActive
+    case allOpen
     case idleStale
     case workspace(String)
 }
@@ -14,8 +14,8 @@ struct Sidebar: View {
         List(selection: $selectedFilter) {
             Section("Status") {
                 sidebarRow(
-                    filter: .allActive,
-                    title: "All Active",
+                    filter: .allOpen,
+                    title: "All Open",
                     icon: "circle.fill",
                     iconColor: .green,
                     count: activeCount
@@ -35,7 +35,7 @@ struct Sidebar: View {
                 ForEach(workspaces, id: \.name) { workspace in
                     sidebarRow(
                         filter: .workspace(workspace.name),
-                        title: workspace.name,
+                        title: AutoLabeler.titleCase(workspaceName: workspace.name),
                         icon: "character.square.fill",
                         iconColor: .blue,
                         count: workspace.count
@@ -81,7 +81,7 @@ struct Sidebar: View {
 
     private var workspaces: [(name: String, count: Int)] {
         let grouped = Dictionary(grouping: appState.sessions.filter { $0.status != .closed }) {
-            $0.workspaceName
+            $0.projectName
         }
         return grouped.map { (name: $0.key, count: $0.value.count) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }

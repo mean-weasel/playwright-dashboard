@@ -1,6 +1,9 @@
 import Foundation
 import Observation
+import OSLog
 import SwiftData
+
+private let logger = Logger(subsystem: "PlaywrightDashboard", category: "SessionManager")
 
 /// Bridges `DaemonWatcher` (file events) and `SessionRecord` (SwiftData).
 ///
@@ -47,11 +50,18 @@ final class SessionManager {
     /// Reconciles the on-disk list with the SwiftData store.
     func syncWithWatcher() {
         let fileURLs = watcher.sessionFiles
-        let liveIds = Set(fileURLs.compactMap { sessionId(from: $0) })
 
-        // 1. Parse & upsert each live file
+        // Parse all files and collect the canonical session IDs from JSON
+        var liveConfigs: [SessionFileConfig] = []
         for url in fileURLs {
             guard let config = parseSessionFile(at: url) else { continue }
+            liveConfigs.append(config)
+        }
+
+        let liveIds = Set(liveConfigs.map(\.name))
+
+        // 1. Upsert each live config
+        for config in liveConfigs {
             upsert(config: config)
         }
 
@@ -64,7 +74,13 @@ final class SessionManager {
         }
 
         // 3. Persist
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("SwiftData save failed: \(error.localizedDescription)")
+            modelContext.rollback()
+            loadExistingRecords()
+        }
     }
 
     // MARK: - Private helpers
@@ -72,25 +88,29 @@ final class SessionManager {
     /// Load all existing SessionRecord objects from SwiftData into our local cache.
     private func loadExistingRecords() {
         let descriptor = FetchDescriptor<SessionRecord>()
-        allRecords = (try? modelContext.fetch(descriptor)) ?? []
-    }
-
-    /// Extracts the session id (the `name` field) from a `.session` file URL.
-    /// The filename format is `<uuid>-<name>.session`, but the canonical id is
-    /// stored inside the JSON as `name`.  We parse the file anyway; this is
-    /// just a quick fallback for set lookups.
-    private func sessionId(from url: URL) -> String? {
-        // Try to derive the id from the filename stem: `<hash>-<name>.session`
-        // Actual id comes from the JSON `name` field when we parse.
-        // Return the stem (everything before the last `-` separated token).
-        let stem = url.deletingPathExtension().lastPathComponent
-        return stem.isEmpty ? nil : stem
+        do {
+            allRecords = try modelContext.fetch(descriptor)
+        } catch {
+            logger.error("SwiftData fetch failed: \(error.localizedDescription)")
+            allRecords = []
+        }
     }
 
     /// Parse a `.session` file URL into a `SessionFileConfig`.
     private func parseSessionFile(at url: URL) -> SessionFileConfig? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(SessionFileConfig.self, from: data)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            logger.debug("Cannot read session file \(url.lastPathComponent): \(error.localizedDescription)")
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(SessionFileConfig.self, from: data)
+        } catch {
+            logger.warning("Cannot parse session file \(url.lastPathComponent): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     /// Insert a new SessionRecord or update an existing one.
@@ -105,6 +125,7 @@ final class SessionManager {
             if existing.workspaceDir != config.workspaceDir {
                 existing.workspaceDir = config.workspaceDir
                 existing.workspaceName = URL(fileURLWithPath: config.workspaceDir).lastPathComponent
+                existing.projectName = SessionRecord.extractProjectName(from: config.workspaceDir)
             }
             if existing.cdpPort != port {
                 existing.cdpPort = port
@@ -115,18 +136,21 @@ final class SessionManager {
                 existing.closedAt = nil
                 existing.lastActivityAt = Date()
             }
+            // Refresh auto-label in case workspace changed
+            AutoLabeler.label(for: existing)
         } else {
             // New session — assign the next available gridOrder
             let nextOrder = (allRecords.map(\.gridOrder).max() ?? -1) + 1
             let record = SessionRecord(
                 sessionId: config.name,
-                autoLabel: config.name,   // Task 7 will compute a smarter label
+                autoLabel: config.name,
                 workspaceDir: config.workspaceDir,
                 cdpPort: port,
                 socketPath: config.socketPath,
                 gridOrder: nextOrder,
                 status: .idle
             )
+            AutoLabeler.label(for: record)
             modelContext.insert(record)
             allRecords.append(record)
         }

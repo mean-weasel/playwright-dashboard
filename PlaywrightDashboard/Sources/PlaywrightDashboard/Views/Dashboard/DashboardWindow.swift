@@ -2,13 +2,14 @@ import SwiftUI
 
 struct DashboardWindow: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedFilter: SidebarFilter? = .allActive
+    @State private var selectedFilter: SidebarFilter? = .allOpen
     @State private var searchText = ""
 
     var body: some View {
         NavigationSplitView {
             Sidebar(selectedFilter: $selectedFilter)
                 .environment(appState)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
         } detail: {
             if let selectedId = appState.selectedSessionId {
                 // Expanded session view placeholder
@@ -28,6 +29,6 @@ struct DashboardWindow: View {
                     .environment(appState)
             }
         }
-        .frame(minWidth: 800, minHeight: 500)
+        .frame(minWidth: 900, minHeight: 550)
     }
 }
