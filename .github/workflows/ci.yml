@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  merge_group:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  detect-changes:
+    name: Detect Changed Paths
+    runs-on: macos-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'PlaywrightDashboard/Sources/**'
+              - 'PlaywrightDashboard/Tests/**'
+              - 'PlaywrightDashboard/Package.swift'
+              - 'Makefile'
+              - '.github/**'
+
+  lint:
+    name: Lint
+    runs-on: macos-15
+    timeout-minutes: 10
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install swift-format
+        run: brew install swift-format
+      - name: Lint
+        run: swift-format lint --recursive PlaywrightDashboard/Sources PlaywrightDashboard/Tests
+
+  build:
+    name: Build
+    runs-on: macos-15
+    timeout-minutes: 15
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Build (warnings as errors)
+        working-directory: PlaywrightDashboard
+        run: |
+          swift build \
+            -Xswiftc -warnings-as-errors \
+            2>&1 | tee build.log
+          if grep -q "error:" build.log; then exit 1; fi
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: macos-15
+    timeout-minutes: 15
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Run tests
+        working-directory: PlaywrightDashboard
+        run: swift test 2>&1 | tee test.log
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## Test Results" >> "$GITHUB_STEP_SUMMARY"
+          if grep -q "Test Suite.*passed" PlaywrightDashboard/test.log 2>/dev/null; then
+            grep "Test Suite\|Executed\|passed\|failed" PlaywrightDashboard/test.log >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_No test results found (test target may not exist yet)._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  file-size-check:
+    name: File Size Check
+    runs-on: macos-latest
+    timeout-minutes: 2
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check file sizes (max 300 lines)
+        run: |
+          OVERSIZED=$(find PlaywrightDashboard/Sources -name '*.swift' -exec awk 'END { if (NR > 300) print FILENAME ": " NR " lines" }' {} \;)
+          if [ -n "$OVERSIZED" ]; then
+            echo "::error::Swift files exceeding 300 lines:"
+            echo "$OVERSIZED"
+            exit 1
+          fi
+
+  ci-gate:
+    name: CI Gate
+    runs-on: macos-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - lint
+      - build
+      - unit-tests
+      - file-size-check
+    steps:
+      - name: Check required jobs
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          TEST_RESULT: ${{ needs.unit-tests.result }}
+          SIZE_RESULT: ${{ needs.file-size-check.result }}
+        run: |
+          echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Size: $SIZE_RESULT"
+          for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$SIZE_RESULT"; do
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              echo "A required job reported: $result"
+              exit 1
+            fi
+          done
+          echo "All required jobs passed or were skipped"
