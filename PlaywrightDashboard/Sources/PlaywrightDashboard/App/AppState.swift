@@ -1,8 +1,9 @@
 import SwiftUI
+import SwiftData
 
 @Observable
 final class AppState {
-    var sessions: [String] = [] // Placeholder — Task 2 replaces with [SessionRecord]
+    var sessions: [SessionRecord] = []
     var isPopoverOpen: Bool = false
     var selectedSessionId: String?
 }

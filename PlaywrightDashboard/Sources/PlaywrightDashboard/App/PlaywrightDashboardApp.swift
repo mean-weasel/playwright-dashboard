@@ -17,10 +17,12 @@ struct PlaywrightDashboardApp: App {
                 .environment(appState)
         }
         .menuBarExtraStyle(.window)
+        .modelContainer(for: SessionRecord.self)
 
         Window("Playwright Dashboard", id: "dashboard") {
             DashboardWindow()
                 .environment(appState)
         }
+        .modelContainer(for: SessionRecord.self)
     }
 }

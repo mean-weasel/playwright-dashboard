@@ -18,6 +18,7 @@ struct StatusBadge: View {
         switch status {
         case .active: .green
         case .idle: .orange
+        case .stale: .yellow
         case .closed: .secondary
         }
     }
