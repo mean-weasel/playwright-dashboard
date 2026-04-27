@@ -18,7 +18,7 @@ struct SessionCard: View {
 
       // Bottom info section
       VStack(alignment: .leading, spacing: 4) {
-        Text(session.customName ?? session.autoLabel)
+        Text(session.displayName)
           .font(.headline)
           .lineLimit(1)
 

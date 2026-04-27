@@ -113,7 +113,7 @@ struct MenubarPopover: View {
         } else {
           ForEach(
             nonClosedSessions.sorted(by: {
-              ($0.customName ?? $0.autoLabel) < ($1.customName ?? $1.autoLabel)
+              $0.displayName < $1.displayName
             }), id: \.sessionId
           ) { session in
             sessionRow(session)
@@ -158,7 +158,7 @@ struct MenubarPopover: View {
           .frame(width: 32, height: 22)
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(session.customName ?? session.autoLabel)
+          Text(session.displayName)
             .font(.caption)
             .lineLimit(1)
             .foregroundStyle(.primary)

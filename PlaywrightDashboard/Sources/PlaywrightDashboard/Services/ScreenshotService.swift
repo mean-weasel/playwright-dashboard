@@ -23,7 +23,8 @@ final class ScreenshotService {
     task = Task { [weak self, weak appState] in
       while !Task.isCancelled {
         guard let self, let appState else { return }
-        await self.captureAll(sessions: appState.sessions)
+        await self.captureAll(
+          sessions: appState.sessions, selectedSessionId: appState.selectedSessionId)
         do {
           try await Task.sleep(for: .seconds(self.interval))
         } catch { break }
@@ -39,11 +40,12 @@ final class ScreenshotService {
 
   // MARK: - Private
 
-  private func captureAll(sessions: [SessionRecord]) async {
-    // Gather targets on the main actor
+  private func captureAll(sessions: [SessionRecord], selectedSessionId: String?) async {
+    // Gather targets on the main actor, skipping the session displayed in expanded view
+    // (its dedicated fast-refresh loop handles captures to avoid dual-writer conflicts)
     let targets: [(sessionId: String, port: Int)] =
       sessions
-      .filter { $0.cdpPort > 0 && $0.status != .closed }
+      .filter { $0.cdpPort > 0 && $0.status != .closed && $0.sessionId != selectedSessionId }
       .map { ($0.sessionId, $0.cdpPort) }
 
     // Capture screenshots concurrently off the main actor
@@ -80,16 +82,7 @@ final class ScreenshotService {
       }
 
       if let result {
-        session.lastScreenshot = result.jpeg
-        session.lastURL = result.url
-        session.lastTitle = result.title
-        session.lastActivityAt = Date()
-
-        if let url = result.url, url != "about:blank" {
-          session.status = .active
-        } else {
-          session.status = .idle
-        }
+        session.updateFromScreenshot(result)
       } else {
         // CDP connection failed — mark stale if inactive long enough
         let staleCutoff = Date().addingTimeInterval(-staleThreshold)

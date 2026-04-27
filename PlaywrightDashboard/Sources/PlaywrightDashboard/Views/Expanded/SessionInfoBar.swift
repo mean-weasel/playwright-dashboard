@@ -15,7 +15,7 @@ struct SessionInfoBar: View {
 
       StatusBadge(status: session.status)
 
-      Text(session.customName ?? session.autoLabel)
+      Text(session.displayName)
         .font(.headline)
         .lineLimit(1)
 
