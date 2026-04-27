@@ -11,19 +11,11 @@ struct DashboardWindow: View {
         .environment(appState)
         .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
     } detail: {
-      if let selectedId = appState.selectedSessionId {
-        // Expanded session view placeholder
-        VStack {
-          Text("Session: \(selectedId)")
-            .font(.title2)
-          Text("Expanded view will be implemented in a future task.")
-            .foregroundStyle(.secondary)
-          Button("Back to Grid") {
-            appState.selectedSessionId = nil
-          }
-          .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      if let selectedId = appState.selectedSessionId,
+        let session = appState.sessions.first(where: { $0.sessionId == selectedId })
+      {
+        ExpandedSessionView(session: session)
+          .environment(appState)
       } else {
         SessionGrid(filter: selectedFilter, searchText: $searchText)
           .environment(appState)
