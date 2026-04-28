@@ -3,12 +3,14 @@ import SwiftUI
 enum SidebarFilter: Hashable {
   case allOpen
   case idleStale
+  case closed
   case workspace(String)
 }
 
 struct Sidebar: View {
   @Environment(AppState.self) private var appState
   @Binding var selectedFilter: SidebarFilter?
+  @State private var showCleanupConfirmation = false
 
   var body: some View {
     List(selection: $selectedFilter) {
@@ -27,6 +29,13 @@ struct Sidebar: View {
           iconColor: .orange,
           count: idleStaleCount
         )
+        sidebarRow(
+          filter: .closed,
+          title: "Closed",
+          icon: "xmark.circle.fill",
+          iconColor: .secondary,
+          count: closedCount
+        )
       }
 
       Divider()
@@ -40,6 +49,31 @@ struct Sidebar: View {
             iconColor: .blue,
             count: workspace.count
           )
+        }
+      }
+
+      if staleCount > 0 {
+        Section {
+          Button {
+            showCleanupConfirmation = true
+          } label: {
+            Label("Clean Up \(staleCount) Stale", systemImage: "trash")
+              .foregroundStyle(.orange)
+          }
+          .buttonStyle(.plain)
+          .confirmationDialog(
+            "Close \(staleCount) stale sessions?",
+            isPresented: $showCleanupConfirmation,
+            titleVisibility: .visible
+          ) {
+            Button("Close All Stale", role: .destructive) {
+              for session in appState.sessions where session.status == .stale {
+                session.close(byUser: true)
+              }
+            }
+          } message: {
+            Text("Closed sessions can be found in the Closed filter.")
+          }
         }
       }
     }
@@ -77,6 +111,14 @@ struct Sidebar: View {
 
   private var idleStaleCount: Int {
     appState.sessions.filter { $0.status == .idle || $0.status == .stale }.count
+  }
+
+  private var closedCount: Int {
+    appState.sessions.filter { $0.status == .closed }.count
+  }
+
+  private var staleCount: Int {
+    appState.sessions.filter { $0.status == .stale }.count
   }
 
   private var workspaces: [(name: String, count: Int)] {

@@ -4,6 +4,9 @@ struct SessionInfoBar: View {
   let session: SessionRecord
   let onBack: () -> Void
   @Binding var showMetadata: Bool
+  @State private var isEditing = false
+  @State private var editText = ""
+  @FocusState private var isFieldFocused: Bool
 
   var body: some View {
     HStack(spacing: 12) {
@@ -17,9 +20,32 @@ struct SessionInfoBar: View {
 
       StatusBadge(status: session.status)
 
-      Text(session.displayName)
-        .font(.headline)
-        .lineLimit(1)
+      if isEditing {
+        TextField("Session name", text: $editText)
+          .font(.headline)
+          .textFieldStyle(.plain)
+          .frame(maxWidth: 200)
+          .focused($isFieldFocused)
+          .onSubmit {
+            commitRename()
+          }
+          .onExitCommand {
+            isEditing = false
+          }
+          .onChange(of: isFieldFocused) { _, focused in
+            if !focused { commitRename() }
+          }
+      } else {
+        Text(session.displayName)
+          .font(.headline)
+          .lineLimit(1)
+          .onTapGesture {
+            editText = session.displayName
+            isEditing = true
+            isFieldFocused = true
+          }
+          .help("Click to rename")
+      }
 
       Spacer()
 
@@ -46,5 +72,11 @@ struct SessionInfoBar: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(.bar)
+  }
+
+  private func commitRename() {
+    let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+    session.customName = trimmed.isEmpty ? nil : trimmed
+    isEditing = false
   }
 }

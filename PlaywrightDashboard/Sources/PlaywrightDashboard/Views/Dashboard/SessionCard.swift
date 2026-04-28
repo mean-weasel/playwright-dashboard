@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct SessionCard: View {
+  @Environment(AppState.self) private var appState
   let session: SessionRecord
   var onSelect: (() -> Void)?
+  var onRename: (() -> Void)?
 
   @State private var isHovered = false
 
@@ -56,6 +58,26 @@ struct SessionCard: View {
     }
     .onTapGesture {
       onSelect?()
+    }
+    .contextMenu {
+      Button("Rename...") {
+        onRename?()
+      }
+
+      Divider()
+
+      if session.status == .closed {
+        Button("Reopen Session") {
+          session.reopen()
+        }
+      } else {
+        Button("Close Session", role: .destructive) {
+          if appState.selectedSessionId == session.sessionId {
+            appState.selectedSessionId = nil
+          }
+          session.close(byUser: true)
+        }
+      }
     }
   }
 
