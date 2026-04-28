@@ -47,6 +47,10 @@ struct SessionGrid: View {
           appState.selectedSessionId = session.sessionId
         }
         .draggable(session.sessionId)
+        .dropDestination(for: String.self) { droppedIds, _ in
+          guard let sourceId = droppedIds.first else { return false }
+          return reorder(sourceId: sourceId, targetId: session.sessionId)
+        }
       }
     }
     .padding(.horizontal, 12)
@@ -70,6 +74,10 @@ struct SessionGrid: View {
                 appState.selectedSessionId = session.sessionId
               }
               .draggable(session.sessionId)
+              .dropDestination(for: String.self) { droppedIds, _ in
+                guard let sourceId = droppedIds.first else { return false }
+                return reorder(sourceId: sourceId, targetId: session.sessionId)
+              }
             }
           }
         }
@@ -135,5 +143,17 @@ struct SessionGrid: View {
 
     result.sort { $0.gridOrder < $1.gridOrder }
     return result
+  }
+
+  private func reorder(sourceId: String, targetId: String) -> Bool {
+    guard sourceId != targetId else { return false }
+    guard let source = appState.sessions.first(where: { $0.sessionId == sourceId }),
+      let target = appState.sessions.first(where: { $0.sessionId == targetId })
+    else { return false }
+
+    let temp = source.gridOrder
+    source.gridOrder = target.gridOrder
+    target.gridOrder = temp
+    return true
   }
 }
