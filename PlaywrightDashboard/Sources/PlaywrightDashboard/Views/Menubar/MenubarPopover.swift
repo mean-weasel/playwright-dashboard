@@ -152,10 +152,23 @@ struct MenubarPopover: View {
       openWindow(id: "dashboard")
     } label: {
       HStack(spacing: 10) {
-        // Thumbnail placeholder
-        RoundedRectangle(cornerRadius: 4)
-          .fill(Color.gray.opacity(0.3))
-          .frame(width: 32, height: 22)
+        Group {
+          if let data = session.lastScreenshot, let nsImage = NSImage(data: data) {
+            Image(nsImage: nsImage)
+              .resizable()
+              .scaledToFill()
+          } else {
+            RoundedRectangle(cornerRadius: 4)
+              .fill(Color.gray.opacity(0.15))
+              .overlay {
+                Image(systemName: "globe")
+                  .font(.caption2)
+                  .foregroundStyle(.quaternary)
+              }
+          }
+        }
+        .frame(width: 32, height: 22)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
 
         VStack(alignment: .leading, spacing: 2) {
           Text(session.displayName)

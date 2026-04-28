@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SessionCard: View {
   let session: SessionRecord
-  var onDoubleClick: (() -> Void)?
+  var onSelect: (() -> Void)?
 
   @State private var isHovered = false
 
@@ -54,8 +54,8 @@ struct SessionCard: View {
     .onHover { hovering in
       isHovered = hovering
     }
-    .onTapGesture(count: 2) {
-      onDoubleClick?()
+    .onTapGesture {
+      onSelect?()
     }
   }
 

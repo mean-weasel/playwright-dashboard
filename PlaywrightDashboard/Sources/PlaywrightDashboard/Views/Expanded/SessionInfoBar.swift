@@ -12,6 +12,8 @@ struct SessionInfoBar: View {
           .labelStyle(.titleAndIcon)
       }
       .buttonStyle(.plain)
+      .keyboardShortcut(.escape, modifiers: [])
+      .help("Go back (Escape)")
 
       StatusBadge(status: session.status)
 
