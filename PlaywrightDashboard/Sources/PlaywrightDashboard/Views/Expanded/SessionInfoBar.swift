@@ -4,6 +4,8 @@ struct SessionInfoBar: View {
   let session: SessionRecord
   let onBack: () -> Void
   @Binding var showMetadata: Bool
+  @State private var isEditing = false
+  @State private var editText = ""
 
   var body: some View {
     HStack(spacing: 12) {
@@ -17,9 +19,30 @@ struct SessionInfoBar: View {
 
       StatusBadge(status: session.status)
 
-      Text(session.displayName)
+      if isEditing {
+        TextField(
+          "Session name", text: $editText,
+          onCommit: {
+            session.customName = editText.isEmpty ? nil : editText
+            isEditing = false
+          }
+        )
         .font(.headline)
-        .lineLimit(1)
+        .textFieldStyle(.plain)
+        .frame(maxWidth: 200)
+        .onExitCommand {
+          isEditing = false
+        }
+      } else {
+        Text(session.displayName)
+          .font(.headline)
+          .lineLimit(1)
+          .onTapGesture {
+            editText = session.displayName
+            isEditing = true
+          }
+          .help("Click to rename")
+      }
 
       Spacer()
 
