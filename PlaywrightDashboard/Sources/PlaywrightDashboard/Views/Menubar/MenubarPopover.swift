@@ -153,7 +153,7 @@ struct MenubarPopover: View {
     } label: {
       HStack(spacing: 10) {
         Group {
-          if let data = session.lastScreenshot, let nsImage = NSImage(data: data) {
+          if let nsImage = session.screenshotImage {
             Image(nsImage: nsImage)
               .resizable()
               .scaledToFill()

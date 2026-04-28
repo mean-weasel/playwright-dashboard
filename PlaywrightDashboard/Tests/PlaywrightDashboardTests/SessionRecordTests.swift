@@ -35,3 +35,32 @@ struct ExtractProjectNameTests {
     #expect(SessionRecord.extractProjectName(from: path) == "playwright-dashboard")
   }
 }
+
+@Suite("SessionRecord.deriveStatus")
+struct DeriveStatusTests {
+
+  @Test("nil URL returns idle")
+  func nilURL() {
+    #expect(SessionRecord.deriveStatus(from: nil) == .idle)
+  }
+
+  @Test("Empty string returns idle")
+  func emptyURL() {
+    #expect(SessionRecord.deriveStatus(from: "") == .idle)
+  }
+
+  @Test("about:blank returns idle")
+  func aboutBlank() {
+    #expect(SessionRecord.deriveStatus(from: "about:blank") == .idle)
+  }
+
+  @Test("Real URL returns active")
+  func realURL() {
+    #expect(SessionRecord.deriveStatus(from: "https://example.com") == .active)
+  }
+
+  @Test("Localhost URL returns active")
+  func localhost() {
+    #expect(SessionRecord.deriveStatus(from: "http://localhost:3000") == .active)
+  }
+}

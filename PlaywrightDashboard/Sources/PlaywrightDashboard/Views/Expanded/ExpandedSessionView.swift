@@ -53,7 +53,7 @@ struct ExpandedSessionView: View {
             .font(.caption)
             .foregroundStyle(.tertiary)
         }
-      } else if let data = session.lastScreenshot, let nsImage = NSImage(data: data) {
+      } else if let nsImage = session.screenshotImage {
         ZStack(alignment: .topTrailing) {
           Image(nsImage: nsImage)
             .resizable()
