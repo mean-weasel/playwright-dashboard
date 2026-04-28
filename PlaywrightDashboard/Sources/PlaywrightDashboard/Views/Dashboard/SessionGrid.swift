@@ -43,9 +43,12 @@ struct SessionGrid: View {
   private var flatGrid: some View {
     LazyVGrid(columns: columns, spacing: 10) {
       ForEach(filteredSessions, id: \.sessionId) { session in
-        SessionCard(session: session) {
-          appState.selectedSessionId = session.sessionId
-        }
+        SessionCard(
+          session: session,
+          onSelect: {
+            appState.selectedSessionId = session.sessionId
+          }
+        )
         .draggable(session.sessionId)
         .dropDestination(for: String.self) { droppedIds, _ in
           guard let sourceId = droppedIds.first else { return false }
@@ -70,9 +73,12 @@ struct SessionGrid: View {
 
           LazyVGrid(columns: columns, spacing: 10) {
             ForEach(group.sessions, id: \.sessionId) { session in
-              SessionCard(session: session) {
-                appState.selectedSessionId = session.sessionId
-              }
+              SessionCard(
+                session: session,
+                onSelect: {
+                  appState.selectedSessionId = session.sessionId
+                }
+              )
               .draggable(session.sessionId)
               .dropDestination(for: String.self) { droppedIds, _ in
                 guard let sourceId = droppedIds.first else { return false }
