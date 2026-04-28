@@ -28,6 +28,13 @@ struct Sidebar: View {
           iconColor: .orange,
           count: idleStaleCount
         )
+        sidebarRow(
+          filter: .closed,
+          title: "Closed",
+          icon: "xmark.circle.fill",
+          iconColor: .secondary,
+          count: closedCount
+        )
       }
 
       Divider()
@@ -41,6 +48,21 @@ struct Sidebar: View {
             iconColor: .blue,
             count: workspace.count
           )
+        }
+      }
+
+      if staleCount > 0 {
+        Section {
+          Button {
+            for session in appState.sessions where session.status == .stale {
+              session.status = .closed
+              session.closedAt = Date()
+            }
+          } label: {
+            Label("Clean Up \(staleCount) Stale", systemImage: "trash")
+              .foregroundStyle(.orange)
+          }
+          .buttonStyle(.plain)
         }
       }
     }
@@ -78,6 +100,14 @@ struct Sidebar: View {
 
   private var idleStaleCount: Int {
     appState.sessions.filter { $0.status == .idle || $0.status == .stale }.count
+  }
+
+  private var closedCount: Int {
+    appState.sessions.filter { $0.status == .closed }.count
+  }
+
+  private var staleCount: Int {
+    appState.sessions.filter { $0.status == .stale }.count
   }
 
   private var workspaces: [(name: String, count: Int)] {
