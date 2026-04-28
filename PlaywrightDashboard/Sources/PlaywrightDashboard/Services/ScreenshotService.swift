@@ -12,7 +12,10 @@ final class ScreenshotService {
   /// Interval between capture cycles.
   private let interval: TimeInterval = 5
   /// How long since last activity before marking a session stale.
-  private let staleThreshold: TimeInterval = 120
+  /// 0 means stale detection is disabled ("Never").
+  private var staleThreshold: TimeInterval {
+    TimeInterval(UserDefaults.standard.integer(forKey: "staleThresholdSeconds"))
+  }
   private var task: Task<Void, Never>?
   private var clients: [Int: CDPClient] = [:]
 
@@ -85,11 +88,14 @@ final class ScreenshotService {
         session.updateFromScreenshot(result)
       } else {
         // CDP connection failed — mark stale if inactive long enough
-        let staleCutoff = Date().addingTimeInterval(-staleThreshold)
-        if (session.status == .active || session.status == .idle)
-          && session.lastActivityAt < staleCutoff
-        {
-          session.status = .stale
+        let threshold = staleThreshold
+        if threshold > 0 {
+          let staleCutoff = Date().addingTimeInterval(-threshold)
+          if (session.status == .active || session.status == .idle)
+            && session.lastActivityAt < staleCutoff
+          {
+            session.status = .stale
+          }
         }
       }
     }

@@ -10,6 +10,12 @@ struct PlaywrightDashboardApp: App {
     appState.sessions.filter { $0.status != .closed }.count
   }
 
+  init() {
+    UserDefaults.standard.register(defaults: [
+      "staleThresholdSeconds": 120
+    ])
+  }
+
   var body: some Scene {
     MenuBarExtra {
       MenubarPopover()
@@ -36,5 +42,9 @@ struct PlaywrightDashboardApp: App {
     }
     .modelContainer(for: SessionRecord.self)
     .defaultSize(width: 1100, height: 700)
+
+    Settings {
+      SettingsView()
+    }
   }
 }
