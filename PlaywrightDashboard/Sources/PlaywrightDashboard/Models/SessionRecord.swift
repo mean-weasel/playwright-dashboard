@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftData
 
@@ -55,6 +56,20 @@ final class SessionRecord {
     self.lastActivityAt = lastActivityAt
   }
 
+  @Transient private var _cachedImage: NSImage?
+  @Transient private var _cachedImageData: Data?
+
+  /// Decoded NSImage from `lastScreenshot`, cached to avoid redundant JPEG decoding per render.
+  var screenshotImage: NSImage? {
+    if let _cachedImage, _cachedImageData == lastScreenshot {
+      return _cachedImage
+    }
+    guard let data = lastScreenshot, let image = NSImage(data: data) else { return nil }
+    _cachedImage = image
+    _cachedImageData = data
+    return image
+  }
+
   /// Display name shown in UI, preferring user-set custom name over auto-generated label.
   var displayName: String {
     customName ?? autoLabel
@@ -68,11 +83,14 @@ final class SessionRecord {
     lastTitle = result.title
     lastActivityAt = Date()
 
-    if let url = result.url, !url.isEmpty, url != "about:blank" {
-      status = .active
-    } else {
-      status = .idle
-    }
+    status = Self.deriveStatus(from: result.url)
+  }
+
+  /// Derives session status from a page URL.
+  /// Returns `.active` for real URLs, `.idle` for nil, empty, or about:blank.
+  static func deriveStatus(from url: String?) -> SessionStatus {
+    guard let url, !url.isEmpty, url != "about:blank" else { return .idle }
+    return .active
   }
 
   /// Extracts the project/app name from a workspace directory path.

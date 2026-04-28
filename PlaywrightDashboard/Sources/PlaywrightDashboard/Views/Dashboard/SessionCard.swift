@@ -61,9 +61,7 @@ struct SessionCard: View {
 
   @ViewBuilder
   private var screenshotArea: some View {
-    if let data = session.lastScreenshot,
-      let nsImage = NSImage(data: data)
-    {
+    if let nsImage = session.screenshotImage {
       Image(nsImage: nsImage)
         .resizable()
         .scaledToFill()
