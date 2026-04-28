@@ -3,6 +3,7 @@ import SwiftUI
 enum SidebarFilter: Hashable {
   case allOpen
   case idleStale
+  case closed
   case workspace(String)
 }
 

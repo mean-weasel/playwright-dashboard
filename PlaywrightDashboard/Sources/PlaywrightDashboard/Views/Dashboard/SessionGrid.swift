@@ -12,6 +12,9 @@ struct SessionGrid: View {
     GridItem(.adaptive(minimum: 260, maximum: 320), spacing: 10)
   ]
 
+  @State private var renamingSession: SessionRecord?
+  @State private var renameText = ""
+
   var body: some View {
     Group {
       if filteredSessions.isEmpty {
@@ -36,6 +39,26 @@ struct SessionGrid: View {
           .frame(minWidth: 200, maxWidth: 300)
       }
     }
+    .alert(
+      "Rename Session",
+      isPresented: .init(
+        get: { renamingSession != nil },
+        set: { if !$0 { renamingSession = nil } }
+      )
+    ) {
+      TextField("Session name", text: $renameText)
+      Button("Save") {
+        if let session = renamingSession {
+          session.customName = renameText.isEmpty ? nil : renameText
+        }
+        renamingSession = nil
+      }
+      Button("Cancel", role: .cancel) {
+        renamingSession = nil
+      }
+    } message: {
+      Text("Enter a custom name for this session, or leave empty to use the auto-generated name.")
+    }
   }
 
   // MARK: - Grid Layouts
@@ -47,6 +70,10 @@ struct SessionGrid: View {
           session: session,
           onSelect: {
             appState.selectedSessionId = session.sessionId
+          },
+          onRename: {
+            renameText = session.displayName
+            renamingSession = session
           }
         )
         .draggable(session.sessionId)
@@ -77,6 +104,10 @@ struct SessionGrid: View {
                 session: session,
                 onSelect: {
                   appState.selectedSessionId = session.sessionId
+                },
+                onRename: {
+                  renameText = session.displayName
+                  renamingSession = session
                 }
               )
               .draggable(session.sessionId)
@@ -100,6 +131,7 @@ struct SessionGrid: View {
     switch filter {
     case .allOpen, nil: return true
     case .idleStale: return true
+    case .closed: return false
     case .workspace: return false
     }
   }
@@ -130,6 +162,8 @@ struct SessionGrid: View {
       result = result.filter { $0.status != .closed }
     case .idleStale:
       result = result.filter { $0.status == .idle || $0.status == .stale }
+    case .closed:
+      result = result.filter { $0.status == .closed }
     case .workspace(let name):
       result = result.filter { $0.projectName == name && $0.status != .closed }
     case nil:
