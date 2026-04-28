@@ -3,6 +3,7 @@ import SwiftUI
 struct SessionCard: View {
   let session: SessionRecord
   var onSelect: (() -> Void)?
+  var onRename: (() -> Void)?
 
   @State private var isHovered = false
 
@@ -56,6 +57,25 @@ struct SessionCard: View {
     }
     .onTapGesture {
       onSelect?()
+    }
+    .contextMenu {
+      Button("Rename...") {
+        onRename?()
+      }
+
+      Divider()
+
+      if session.status == .closed {
+        Button("Reopen Session") {
+          session.status = .idle
+          session.closedAt = nil
+        }
+      } else {
+        Button("Close Session", role: .destructive) {
+          session.status = .closed
+          session.closedAt = Date()
+        }
+      }
     }
   }
 
