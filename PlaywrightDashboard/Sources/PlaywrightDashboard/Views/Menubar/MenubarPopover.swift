@@ -69,9 +69,17 @@ struct MenubarPopover: View {
         }
         Spacer()
         if !staleSessions.isEmpty {
-          Text("Clean up")
-            .font(.caption)
-            .foregroundStyle(.blue)
+          Button {
+            for session in staleSessions {
+              session.status = .closed
+              session.closedAt = Date()
+            }
+          } label: {
+            Text("Clean up")
+              .font(.caption)
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.blue)
         }
       }
 
