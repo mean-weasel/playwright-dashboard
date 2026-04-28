@@ -49,7 +49,8 @@ struct SessionGrid: View {
       TextField("Session name", text: $renameText)
       Button("Save") {
         if let session = renamingSession {
-          session.customName = renameText.isEmpty ? nil : renameText
+          let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+          session.customName = trimmed.isEmpty ? nil : trimmed
         }
         renamingSession = nil
       }
@@ -66,21 +67,7 @@ struct SessionGrid: View {
   private var flatGrid: some View {
     LazyVGrid(columns: columns, spacing: 10) {
       ForEach(filteredSessions, id: \.sessionId) { session in
-        SessionCard(
-          session: session,
-          onSelect: {
-            appState.selectedSessionId = session.sessionId
-          },
-          onRename: {
-            renameText = session.displayName
-            renamingSession = session
-          }
-        )
-        .draggable(session.sessionId)
-        .dropDestination(for: String.self) { droppedIds, _ in
-          guard let sourceId = droppedIds.first else { return false }
-          return reorder(sourceId: sourceId, targetId: session.sessionId)
-        }
+        draggableCard(for: session)
       }
     }
     .padding(.horizontal, 12)
@@ -100,21 +87,7 @@ struct SessionGrid: View {
 
           LazyVGrid(columns: columns, spacing: 10) {
             ForEach(group.sessions, id: \.sessionId) { session in
-              SessionCard(
-                session: session,
-                onSelect: {
-                  appState.selectedSessionId = session.sessionId
-                },
-                onRename: {
-                  renameText = session.displayName
-                  renamingSession = session
-                }
-              )
-              .draggable(session.sessionId)
-              .dropDestination(for: String.self) { droppedIds, _ in
-                guard let sourceId = droppedIds.first else { return false }
-                return reorder(sourceId: sourceId, targetId: session.sessionId)
-              }
+              draggableCard(for: session)
             }
           }
         }
@@ -124,15 +97,31 @@ struct SessionGrid: View {
     .padding(.vertical, 10)
   }
 
+  private func draggableCard(for session: SessionRecord) -> some View {
+    SessionCard(
+      session: session,
+      onSelect: {
+        appState.selectedSessionId = session.sessionId
+      },
+      onRename: {
+        renameText = session.displayName
+        renamingSession = session
+      }
+    )
+    .draggable(session.sessionId)
+    .dropDestination(for: String.self) { droppedIds, _ in
+      guard let sourceId = droppedIds.first else { return false }
+      return reorder(sourceId: sourceId, targetId: session.sessionId)
+    }
+  }
+
   // MARK: - Grouping
 
-  /// Show grouped view when viewing "All Active" or nil filter (no specific workspace selected)
+  /// Groups sessions by workspace for broad filters (allOpen, idleStale, nil). Closed and single-workspace filters show a flat grid.
   private var isGroupedByWorkspace: Bool {
     switch filter {
-    case .allOpen, nil: return true
-    case .idleStale: return true
-    case .closed: return false
-    case .workspace: return false
+    case .allOpen, .idleStale, nil: return true
+    case .closed, .workspace: return false
     }
   }
 

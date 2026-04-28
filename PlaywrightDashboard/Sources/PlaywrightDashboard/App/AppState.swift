@@ -57,6 +57,6 @@ final class AppState {
   private func performSync() {
     guard let manager = sessionManager else { return }
     manager.syncWithWatcher()
-    sessions = manager.activeSessions
+    sessions = manager.allSessions
   }
 }

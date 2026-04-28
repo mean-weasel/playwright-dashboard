@@ -75,6 +75,25 @@ final class SessionRecord {
     customName ?? autoLabel
   }
 
+  /// Whether the user explicitly closed this session (vs. auto-closed by sync when file disappeared).
+  /// When true, the sync loop will not auto-reopen the session even if its file reappears.
+  var userClosed: Bool = false
+
+  /// Marks the session as closed with the current timestamp.
+  /// Set `byUser: true` when the close was user-initiated (prevents sync from auto-reopening).
+  func close(byUser: Bool = false) {
+    status = .closed
+    closedAt = Date()
+    if byUser { userClosed = true }
+  }
+
+  /// Reopens a closed session, resetting it to idle.
+  func reopen() {
+    status = .idle
+    closedAt = nil
+    userClosed = false
+  }
+
   /// Updates session fields from a CDP screenshot result.
   /// Centralizes status derivation so the logic isn't duplicated across services.
   func updateFromScreenshot(_ result: CDPClient.ScreenshotResult) {

@@ -18,10 +18,9 @@ final class SessionManager {
 
   // MARK: - Public state
 
-  /// All non-closed sessions, sorted by gridOrder then createdAt.
-  var activeSessions: [SessionRecord] {
+  /// All sessions sorted by gridOrder then createdAt.
+  var allSessions: [SessionRecord] {
     allRecords
-      .filter { $0.status != .closed }
       .sorted {
         if $0.gridOrder != $1.gridOrder { return $0.gridOrder < $1.gridOrder }
         return $0.createdAt < $1.createdAt
@@ -65,11 +64,10 @@ final class SessionManager {
       upsert(config: config)
     }
 
-    // 2. Mark disappeared sessions as closed
+    // 2. Mark disappeared sessions as closed (auto-close, not user-initiated)
     for record in allRecords where !record.sessionId.isEmpty {
       if record.status != .closed && !liveIds.contains(record.sessionId) {
-        record.status = .closed
-        record.closedAt = Date()
+        record.close(byUser: false)
       }
     }
 
@@ -132,10 +130,10 @@ final class SessionManager {
       if existing.cdpPort != port {
         existing.cdpPort = port
       }
-      // Reopen a previously closed session that has re-appeared on disk
-      if existing.status == .closed {
-        existing.status = .idle
-        existing.closedAt = nil
+      // Reopen a previously closed session that has re-appeared on disk,
+      // but only if it was auto-closed (not user-initiated).
+      if existing.status == .closed && !existing.userClosed {
+        existing.reopen()
         existing.lastActivityAt = Date()
       }
       // Refresh auto-label in case workspace changed

@@ -6,6 +6,7 @@ struct SessionInfoBar: View {
   @Binding var showMetadata: Bool
   @State private var isEditing = false
   @State private var editText = ""
+  @FocusState private var isFieldFocused: Bool
 
   var body: some View {
     HStack(spacing: 12) {
@@ -20,19 +21,20 @@ struct SessionInfoBar: View {
       StatusBadge(status: session.status)
 
       if isEditing {
-        TextField(
-          "Session name", text: $editText,
-          onCommit: {
-            session.customName = editText.isEmpty ? nil : editText
+        TextField("Session name", text: $editText)
+          .font(.headline)
+          .textFieldStyle(.plain)
+          .frame(maxWidth: 200)
+          .focused($isFieldFocused)
+          .onSubmit {
+            commitRename()
+          }
+          .onExitCommand {
             isEditing = false
           }
-        )
-        .font(.headline)
-        .textFieldStyle(.plain)
-        .frame(maxWidth: 200)
-        .onExitCommand {
-          isEditing = false
-        }
+          .onChange(of: isFieldFocused) { _, focused in
+            if !focused { commitRename() }
+          }
       } else {
         Text(session.displayName)
           .font(.headline)
@@ -40,6 +42,7 @@ struct SessionInfoBar: View {
           .onTapGesture {
             editText = session.displayName
             isEditing = true
+            isFieldFocused = true
           }
           .help("Click to rename")
       }
@@ -69,5 +72,11 @@ struct SessionInfoBar: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(.bar)
+  }
+
+  private func commitRename() {
+    let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+    session.customName = trimmed.isEmpty ? nil : trimmed
+    isEditing = false
   }
 }

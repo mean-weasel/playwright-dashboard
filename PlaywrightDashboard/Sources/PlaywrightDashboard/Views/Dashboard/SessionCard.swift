@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SessionCard: View {
+  @Environment(AppState.self) private var appState
   let session: SessionRecord
   var onSelect: (() -> Void)?
   var onRename: (() -> Void)?
@@ -67,13 +68,14 @@ struct SessionCard: View {
 
       if session.status == .closed {
         Button("Reopen Session") {
-          session.status = .idle
-          session.closedAt = nil
+          session.reopen()
         }
       } else {
         Button("Close Session", role: .destructive) {
-          session.status = .closed
-          session.closedAt = Date()
+          if appState.selectedSessionId == session.sessionId {
+            appState.selectedSessionId = nil
+          }
+          session.close(byUser: true)
         }
       }
     }

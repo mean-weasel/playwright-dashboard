@@ -10,6 +10,7 @@ enum SidebarFilter: Hashable {
 struct Sidebar: View {
   @Environment(AppState.self) private var appState
   @Binding var selectedFilter: SidebarFilter?
+  @State private var showCleanupConfirmation = false
 
   var body: some View {
     List(selection: $selectedFilter) {
@@ -54,15 +55,25 @@ struct Sidebar: View {
       if staleCount > 0 {
         Section {
           Button {
-            for session in appState.sessions where session.status == .stale {
-              session.status = .closed
-              session.closedAt = Date()
-            }
+            showCleanupConfirmation = true
           } label: {
             Label("Clean Up \(staleCount) Stale", systemImage: "trash")
               .foregroundStyle(.orange)
           }
           .buttonStyle(.plain)
+          .confirmationDialog(
+            "Close \(staleCount) stale sessions?",
+            isPresented: $showCleanupConfirmation,
+            titleVisibility: .visible
+          ) {
+            Button("Close All Stale", role: .destructive) {
+              for session in appState.sessions where session.status == .stale {
+                session.close(byUser: true)
+              }
+            }
+          } message: {
+            Text("Closed sessions can be found in the Closed filter.")
+          }
         }
       }
     }

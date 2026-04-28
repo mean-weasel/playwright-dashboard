@@ -71,8 +71,7 @@ struct MenubarPopover: View {
         if !staleSessions.isEmpty {
           Button {
             for session in staleSessions {
-              session.status = .closed
-              session.closedAt = Date()
+              session.close(byUser: true)
             }
           } label: {
             Text("Clean up")
