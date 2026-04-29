@@ -10,7 +10,6 @@ private struct ContentHeightKey: PreferenceKey {
 struct MenubarPopover: View {
   @Environment(AppState.self) private var appState
   @Environment(\.openWindow) private var openWindow
-  @Environment(\.modelContext) private var modelContext
   @State private var listContentHeight: CGFloat = 0
   @AppStorage("popoverGroupByApp") private var groupByApp = true
 
@@ -41,9 +40,6 @@ struct MenubarPopover: View {
         .padding(.vertical, 10)
     }
     .frame(width: 300)
-    .task {
-      appState.startSync(modelContext: modelContext)
-    }
   }
 
   // MARK: - Subviews

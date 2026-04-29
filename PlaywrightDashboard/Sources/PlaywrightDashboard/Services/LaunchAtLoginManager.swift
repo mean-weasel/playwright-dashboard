@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import ServiceManagement
 
 private let logger = Logger(subsystem: "PlaywrightDashboard", category: "LaunchAtLogin")
 
@@ -11,21 +12,39 @@ enum LaunchAtLoginManager {
     ).path
   }()
 
-  /// Whether the LaunchAgent plist currently exists on disk.
+  /// Whether the app is registered with Login Items, or with the legacy fallback plist.
   static var isEnabled: Bool {
-    FileManager.default.fileExists(atPath: plistPath)
+    SMAppService.mainApp.status == .enabled || FileManager.default.fileExists(atPath: plistPath)
   }
 
-  /// Install the LaunchAgent plist so the app starts at login.
+  /// Register the app as a login item. Falls back to a LaunchAgent plist when
+  /// running outside a normal app bundle, such as during local SwiftPM builds.
   static func enable() {
-    let executablePath = Bundle.main.executablePath ?? CommandLine.arguments[0]
+    do {
+      try SMAppService.mainApp.register()
+      removeLegacyLaunchAgent()
+      logger.info("Registered login item with SMAppService")
+    } catch {
+      logger.warning(
+        "SMAppService registration failed, falling back to LaunchAgent: \(error.localizedDescription)"
+      )
+      installLegacyLaunchAgent()
+    }
+  }
 
-    let plist: [String: Any] = [
-      "Label": "com.neonwatty.PlaywrightDashboard",
-      "ProgramArguments": [executablePath],
-      "RunAtLoad": true,
-      "KeepAlive": false,
-    ]
+  /// Remove the login item registration and the legacy fallback plist.
+  static func disable() {
+    do {
+      try SMAppService.mainApp.unregister()
+      logger.info("Unregistered login item with SMAppService")
+    } catch {
+      logger.debug("SMAppService unregister skipped: \(error.localizedDescription)")
+    }
+    removeLegacyLaunchAgent()
+  }
+
+  private static func installLegacyLaunchAgent() {
+    let executablePath = Bundle.main.executablePath ?? CommandLine.arguments[0]
 
     let dir = (plistPath as NSString).deletingLastPathComponent
     try? FileManager.default.createDirectory(
@@ -33,7 +52,10 @@ enum LaunchAtLoginManager {
 
     do {
       let data = try PropertyListSerialization.data(
-        fromPropertyList: plist, format: .xml, options: 0)
+        fromPropertyList: legacyLaunchAgentPlist(executablePath: executablePath),
+        format: .xml,
+        options: 0
+      )
       try data.write(to: URL(fileURLWithPath: plistPath))
       logger.info("LaunchAgent installed at \(plistPath)")
     } catch {
@@ -41,13 +63,21 @@ enum LaunchAtLoginManager {
     }
   }
 
-  /// Remove the LaunchAgent plist.
-  static func disable() {
+  private static func removeLegacyLaunchAgent() {
     do {
       try FileManager.default.removeItem(atPath: plistPath)
       logger.info("LaunchAgent removed")
     } catch {
       logger.debug("LaunchAgent removal skipped: \(error.localizedDescription)")
     }
+  }
+
+  static func legacyLaunchAgentPlist(executablePath: String) -> [String: Any] {
+    [
+      "Label": "com.neonwatty.PlaywrightDashboard",
+      "ProgramArguments": [executablePath],
+      "RunAtLoad": true,
+      "KeepAlive": false,
+    ]
   }
 }

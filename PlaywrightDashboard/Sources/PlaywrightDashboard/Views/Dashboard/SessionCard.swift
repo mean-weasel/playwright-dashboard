@@ -7,6 +7,7 @@ struct SessionCard: View {
   var onRename: (() -> Void)?
 
   @State private var isHovered = false
+  @AppStorage("staleThresholdSeconds") private var staleThresholdSeconds = 120
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -147,9 +148,7 @@ struct SessionCard: View {
   }
 
   private var staleReason: String {
-    if session.lastURL == nil || session.lastURL == "about:blank" {
-      return "No navigation"
-    }
-    return "Idle 2m+"
+    StaleLabelFormatter.reason(
+      lastURL: session.lastURL, thresholdSeconds: staleThresholdSeconds)
   }
 }

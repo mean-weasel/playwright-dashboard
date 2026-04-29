@@ -32,13 +32,19 @@ final class SessionManager {
   /// Snapshot of all SessionRecord objects managed here (avoids repeated fetches).
   private var allRecords: [SessionRecord] = []
 
-  private let watcher: DaemonWatcher
+  private let sessionFileProvider: @MainActor () -> [URL]
   private let modelContext: ModelContext
 
   // MARK: - Init
 
   init(watcher: DaemonWatcher, modelContext: ModelContext) {
-    self.watcher = watcher
+    self.sessionFileProvider = { watcher.sessionFiles }
+    self.modelContext = modelContext
+    loadExistingRecords()
+  }
+
+  init(sessionFileProvider: @escaping @MainActor () -> [URL], modelContext: ModelContext) {
+    self.sessionFileProvider = sessionFileProvider
     self.modelContext = modelContext
     loadExistingRecords()
   }
@@ -48,7 +54,7 @@ final class SessionManager {
   /// Called whenever `DaemonWatcher.sessionFiles` changes.
   /// Reconciles the on-disk list with the SwiftData store.
   func syncWithWatcher() {
-    let fileURLs = watcher.sessionFiles
+    let fileURLs = sessionFileProvider()
 
     // Parse all files and collect the canonical session IDs from JSON
     var liveConfigs: [SessionFileConfig] = []

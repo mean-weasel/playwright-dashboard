@@ -5,11 +5,17 @@ import Foundation
 actor CDPClient {
   private let port: Int
   private var nextId = 1
-  private let session = URLSession(configuration: .ephemeral)
+  private let session: URLSession
   private let maxResponseMessages = 10
+  private let requestTimeout: Duration
 
-  init(port: Int) {
+  init(port: Int, requestTimeout: Duration = .seconds(3)) {
     self.port = port
+    self.requestTimeout = requestTimeout
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = requestTimeout.timeInterval
+    configuration.timeoutIntervalForResource = requestTimeout.timeInterval
+    self.session = URLSession(configuration: configuration)
   }
 
   // MARK: - Page Discovery
@@ -25,7 +31,9 @@ actor CDPClient {
   /// Fetches the list of pages from the CDP HTTP endpoint.
   func listPages() async throws -> [PageInfo] {
     let url = URL(string: "http://localhost:\(port)/json/list")!
-    let (data, _) = try await session.data(from: url)
+    let (data, _) = try await withTimeout(requestTimeout) {
+      try await self.session.data(from: url)
+    }
     return try JSONDecoder().decode([PageInfo].self, from: data)
   }
 
@@ -70,11 +78,11 @@ actor CDPClient {
     guard let commandString = String(data: commandData, encoding: .utf8) else {
       throw CDPError.invalidResponse
     }
-    try await ws.send(.string(commandString))
+    try await sendWebSocketMessage(.string(commandString), to: ws)
 
     // Read response (may need to skip CDP events)
     for _ in 0..<maxResponseMessages {
-      let message = try await ws.receive()
+      let message = try await receiveWebSocketMessage(from: ws)
       switch message {
       case .string(let text):
         guard let responseData = text.data(using: .utf8),
@@ -126,6 +134,67 @@ actor CDPClient {
       case .timeout: "Timed out waiting for CDP response"
       case .protocolError(let msg): "CDP error: \(msg)"
       }
+    }
+  }
+
+  private func withTimeout<T: Sendable>(
+    _ timeout: Duration,
+    operation: @escaping @Sendable () async throws -> T
+  ) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+      group.addTask {
+        try await operation()
+      }
+      group.addTask {
+        try await Task.sleep(for: timeout)
+        throw CDPError.timeout
+      }
+      defer { group.cancelAll() }
+
+      guard let result = try await group.next() else {
+        throw CDPError.timeout
+      }
+      return result
+    }
+  }
+
+  private func sendWebSocketMessage(
+    _ message: URLSessionWebSocketTask.Message,
+    to webSocket: URLSessionWebSocketTask
+  ) async throws {
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      group.addTask {
+        try await webSocket.send(message)
+      }
+      group.addTask {
+        try await Task.sleep(for: self.requestTimeout)
+        webSocket.cancel(with: .goingAway, reason: nil)
+        throw CDPError.timeout
+      }
+      defer { group.cancelAll() }
+
+      _ = try await group.next()
+    }
+  }
+
+  private func receiveWebSocketMessage(
+    from webSocket: URLSessionWebSocketTask
+  ) async throws -> URLSessionWebSocketTask.Message {
+    try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
+      group.addTask {
+        try await webSocket.receive()
+      }
+      group.addTask {
+        try await Task.sleep(for: self.requestTimeout)
+        webSocket.cancel(with: .goingAway, reason: nil)
+        throw CDPError.timeout
+      }
+      defer { group.cancelAll() }
+
+      guard let result = try await group.next() else {
+        throw CDPError.timeout
+      }
+      return result
     }
   }
 }

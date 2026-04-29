@@ -50,4 +50,20 @@ struct AutoLabelerTests {
   func mixedSeparators() {
     #expect(AutoLabeler.titleCase(workspaceName: "fix_api-route") == "Fix API Route")
   }
+
+  @Test("Auto label ignores custom name")
+  func autoLabelIgnoresCustomName() {
+    let session = SessionRecord(
+      sessionId: "admin-ux-25c2",
+      autoLabel: "Old Auto",
+      workspaceDir: "/tmp/my-app/.claude/worktrees/admin-ux-25c2",
+      cdpPort: 0,
+      socketPath: "/tmp/session.sock",
+      customName: "Pinned Name"
+    )
+
+    #expect(AutoLabeler.label(for: session) == "Admin UX")
+    #expect(session.autoLabel == "Admin UX")
+    #expect(session.displayName == "Pinned Name")
+  }
 }
