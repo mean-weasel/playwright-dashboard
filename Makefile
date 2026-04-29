@@ -1,4 +1,4 @@
-.PHONY: build test lint file-size mockups package sign-package validate-package smoke-app smoke-login-item smoke-live-cdp install clean qa
+.PHONY: build test lint file-size mockups package sign-package validate-package smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction install clean qa
 
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
@@ -133,6 +133,13 @@ smoke-live-cdp:
 	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$PORT \
 		RUN_LIVE_CDP_INTERACTION_SMOKE=$${RUN_LIVE_CDP_INTERACTION_SMOKE:-0} \
 		swift test --filter CDPClientLiveSmokeTests
+
+smoke-expanded-interaction: validate-package
+	@if [ "$$RUN_EXPANDED_INTERACTION_SMOKE" != "1" ]; then \
+		echo "Set RUN_EXPANDED_INTERACTION_SMOKE=1 to drive the expanded-session interaction smoke test"; \
+		exit 2; \
+	fi
+	scripts/smoke_expanded_interaction.mjs
 
 install: package
 	mkdir -p $(INSTALL_DIR)
