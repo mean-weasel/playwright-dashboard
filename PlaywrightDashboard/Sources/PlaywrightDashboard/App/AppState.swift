@@ -111,12 +111,7 @@ final class AppState {
   func closeAndTerminate(_ session: SessionRecord) {
     close(session, byUser: true)
     Task {
-      do {
-        try await sessionTerminator.close(sessionId: session.sessionId)
-        sessionTerminationErrors[session.sessionId] = nil
-      } catch {
-        sessionTerminationErrors[session.sessionId] = error.localizedDescription
-      }
+      await terminate(session)
     }
   }
 
@@ -142,14 +137,17 @@ final class AppState {
     closeStaleSessions()
     for session in staleSessions {
       Task {
-        do {
-          try await sessionTerminator.close(sessionId: session.sessionId)
-          sessionTerminationErrors[session.sessionId] = nil
-        } catch {
-          sessionTerminationErrors[session.sessionId] = error.localizedDescription
-        }
+        await terminate(session)
       }
     }
+  }
+
+  func dismissTerminationError(sessionId: String) {
+    sessionTerminationErrors[sessionId] = nil
+  }
+
+  func dismissAllTerminationErrors() {
+    sessionTerminationErrors.removeAll()
   }
 
   func clearClosedSessions() {
@@ -228,6 +226,15 @@ final class AppState {
     } catch {
       modelContext?.rollback()
       performSync()
+    }
+  }
+
+  private func terminate(_ session: SessionRecord) async {
+    do {
+      try await sessionTerminator.close(sessionId: session.sessionId)
+      sessionTerminationErrors[session.sessionId] = nil
+    } catch {
+      sessionTerminationErrors[session.sessionId] = error.localizedDescription
     }
   }
 
