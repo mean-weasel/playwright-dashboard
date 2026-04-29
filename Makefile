@@ -46,9 +46,10 @@ mockups:
 
 $(PACKAGE_BUNDLE): build
 	rm -rf $(PACKAGE_BUNDLE)
-	mkdir -p $(PACKAGE_BUNDLE)/Contents/MacOS
+	mkdir -p $(PACKAGE_BUNDLE)/Contents/MacOS $(PACKAGE_BUNDLE)/Contents/Resources
 	cp $(SWIFT_BUILD_DIR)/$(APP_NAME) $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	chmod +x $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
+	scripts/generate_app_icon.swift $(PACKAGE_BUNDLE)/Contents/Resources/AppIcon.icns
 	printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -62,6 +63,8 @@ $(PACKAGE_BUNDLE): build
 		'  <string>$(APP_NAME)</string>' \
 		'  <key>CFBundleDisplayName</key>' \
 		'  <string>Playwright Dashboard</string>' \
+		'  <key>CFBundleIconFile</key>' \
+		'  <string>AppIcon</string>' \
 		'  <key>CFBundlePackageType</key>' \
 		'  <string>APPL</string>' \
 		'  <key>CFBundleShortVersionString</key>' \
@@ -87,12 +90,15 @@ package: sign-package
 
 validate-package: package
 	test -x $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
+	test -f $(PACKAGE_BUNDLE)/Contents/Resources/AppIcon.icns
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx '$(APP_NAME)'
 	/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx 'APPL'
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx 'AppIcon'
 	codesign --verify --strict --deep $(PACKAGE_BUNDLE)
 	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/MacOS/$(APP_NAME)'
 	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/Info.plist'
+	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/Resources/AppIcon.icns'
 	rm -rf $(DIST_DIR)/zipcheck
 	mkdir -p $(DIST_DIR)/zipcheck
 	unzip -q $(DIST_DIR)/$(APP_NAME).zip -d $(DIST_DIR)/zipcheck
@@ -124,7 +130,9 @@ smoke-live-cdp:
 		echo "Set LIVE_CDP_PORT or start a Playwright daemon session with CDP enabled"; \
 		exit 2; \
 	fi; \
-	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$PORT swift test --filter CDPClientLiveSmokeTests
+	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$PORT \
+		RUN_LIVE_CDP_INTERACTION_SMOKE=$${RUN_LIVE_CDP_INTERACTION_SMOKE:-0} \
+		swift test --filter CDPClientLiveSmokeTests
 
 install: package
 	mkdir -p $(INSTALL_DIR)

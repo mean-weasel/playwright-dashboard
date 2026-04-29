@@ -12,7 +12,9 @@ on waitForMenuBarExtra(processName, maxAttempts)
   repeat with attempt from 1 to maxAttempts
     tell application "System Events"
       tell process processName
-        if (count of menu bar items of menu bar 2) > 0 then return true
+        if (count of menu bars) > 1 then
+          if (count of menu bar items of menu bar 2) > 0 then return true
+        end if
       end tell
     end tell
     delay 0.5

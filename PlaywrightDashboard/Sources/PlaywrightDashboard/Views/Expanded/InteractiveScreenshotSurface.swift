@@ -18,6 +18,12 @@ struct InteractiveScreenshotSurface: View {
           .resizable()
           .aspectRatio(contentMode: .fit)
           .clipShape(RoundedRectangle(cornerRadius: 8))
+          .overlay {
+            if interactionEnabled {
+              RoundedRectangle(cornerRadius: 8)
+                .stroke(.green, lineWidth: 2)
+            }
+          }
           .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
 
