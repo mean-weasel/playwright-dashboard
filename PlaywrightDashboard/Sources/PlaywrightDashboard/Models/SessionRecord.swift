@@ -97,6 +97,8 @@ final class SessionRecord {
   /// Updates session fields from a CDP screenshot result.
   /// Centralizes status derivation so the logic isn't duplicated across services.
   func updateFromScreenshot(_ result: CDPClient.ScreenshotResult) {
+    guard status != .closed else { return }
+
     lastScreenshot = result.jpeg
     lastURL = result.url
     lastTitle = result.title

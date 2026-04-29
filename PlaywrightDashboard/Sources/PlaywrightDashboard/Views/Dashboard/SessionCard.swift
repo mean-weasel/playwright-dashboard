@@ -69,14 +69,11 @@ struct SessionCard: View {
 
       if session.status == .closed {
         Button("Reopen Session") {
-          session.reopen()
+          appState.reopen(session)
         }
       } else {
         Button("Close Session", role: .destructive) {
-          if appState.selectedSessionId == session.sessionId {
-            appState.selectedSessionId = nil
-          }
-          session.close(byUser: true)
+          appState.closeAndTerminate(session)
         }
       }
     }

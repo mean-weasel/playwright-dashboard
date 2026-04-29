@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SessionInfoBar: View {
+  @Environment(AppState.self) private var appState
   let session: SessionRecord
   let onBack: () -> Void
   @Binding var showMetadata: Bool
@@ -59,6 +60,36 @@ struct SessionInfoBar: View {
       }
 
       Button {
+        _ = appState.saveScreenshot(session)
+      } label: {
+        Image(systemName: "square.and.arrow.down")
+          .font(.body)
+      }
+      .buttonStyle(.plain)
+      .disabled(session.lastScreenshot == nil)
+      .help("Save screenshot")
+
+      Button {
+        appState.openCurrentURL(session)
+      } label: {
+        Image(systemName: "safari")
+          .font(.body)
+      }
+      .buttonStyle(.plain)
+      .disabled(session.lastURL == nil || session.lastURL == "about:blank")
+      .help("Open current URL")
+
+      Button {
+        appState.openCDPInspector(session)
+      } label: {
+        Image(systemName: "network")
+          .font(.body)
+      }
+      .buttonStyle(.plain)
+      .disabled(session.cdpPort <= 0)
+      .help("Open CDP inspector")
+
+      Button {
         withAnimation(.easeInOut(duration: 0.2)) {
           showMetadata.toggle()
         }
@@ -75,8 +106,7 @@ struct SessionInfoBar: View {
   }
 
   private func commitRename() {
-    let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-    session.customName = trimmed.isEmpty ? nil : trimmed
+    appState.rename(session, to: editText)
     isEditing = false
   }
 }

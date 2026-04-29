@@ -67,9 +67,7 @@ struct Sidebar: View {
             titleVisibility: .visible
           ) {
             Button("Close All Stale", role: .destructive) {
-              for session in appState.sessions where session.status == .stale {
-                session.close(byUser: true)
-              }
+              appState.closeAndTerminateStaleSessions()
             }
           } message: {
             Text("Closed sessions can be found in the Closed filter.")

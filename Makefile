@@ -110,7 +110,11 @@ smoke-live-cdp:
 		echo "Set RUN_LIVE_CDP_SMOKE=1 to run against a live Playwright/CDP browser session"; \
 		exit 2; \
 	fi
-	@echo "Live CDP smoke requires an existing Playwright daemon session with remote debugging enabled."
+	@if [ -z "$$LIVE_CDP_PORT" ]; then \
+		echo "Set LIVE_CDP_PORT to the browser's remote debugging port"; \
+		exit 2; \
+	fi
+	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$LIVE_CDP_PORT swift test --filter CDPClientLiveSmokeTests
 
 install: package
 	mkdir -p $(INSTALL_DIR)

@@ -34,18 +34,27 @@ final class SessionManager {
 
   private let sessionFileProvider: @MainActor () -> [URL]
   private let modelContext: ModelContext
+  private let closedSessionRetentionProvider: () -> Duration?
 
   // MARK: - Init
 
   init(watcher: DaemonWatcher, modelContext: ModelContext) {
     self.sessionFileProvider = { watcher.sessionFiles }
     self.modelContext = modelContext
+    self.closedSessionRetentionProvider = { DashboardSettings.closedSessionRetention() }
     loadExistingRecords()
   }
 
-  init(sessionFileProvider: @escaping @MainActor () -> [URL], modelContext: ModelContext) {
+  init(
+    sessionFileProvider: @escaping @MainActor () -> [URL],
+    modelContext: ModelContext,
+    closedSessionRetentionProvider: @escaping () -> Duration? = {
+      DashboardSettings.closedSessionRetention()
+    }
+  ) {
     self.sessionFileProvider = sessionFileProvider
     self.modelContext = modelContext
+    self.closedSessionRetentionProvider = closedSessionRetentionProvider
     loadExistingRecords()
   }
 
@@ -76,6 +85,8 @@ final class SessionManager {
         record.close(byUser: false)
       }
     }
+
+    purgeExpiredClosedRecords(liveIds: liveIds)
 
     // 3. Persist
     do {
@@ -160,5 +171,26 @@ final class SessionManager {
       modelContext.insert(record)
       allRecords.append(record)
     }
+  }
+
+  private func purgeExpiredClosedRecords(liveIds: Set<String>) {
+    guard let retention = closedSessionRetentionProvider() else { return }
+    let cutoff = Date().addingTimeInterval(-retention.timeInterval)
+    var keptRecords: [SessionRecord] = []
+
+    for record in allRecords {
+      let shouldPurge =
+        record.status == .closed
+        && !liveIds.contains(record.sessionId)
+        && (record.closedAt ?? record.createdAt) < cutoff
+
+      if shouldPurge {
+        modelContext.delete(record)
+      } else {
+        keptRecords.append(record)
+      }
+    }
+
+    allRecords = keptRecords
   }
 }

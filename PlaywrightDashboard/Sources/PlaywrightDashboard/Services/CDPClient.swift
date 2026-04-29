@@ -52,9 +52,7 @@ actor CDPClient {
 
     // Pick the first "page" type that has a real URL (not about:blank)
     guard
-      let page = pages.first(where: {
-        $0.type == "page" && $0.url != nil && $0.url != "about:blank"
-      }) ?? pages.first(where: { $0.type == "page" }),
+      let page = Self.pageForScreenshot(from: pages),
       let wsURLString = page.webSocketDebuggerUrl,
       let wsURL = URL(string: wsURLString)
     else {
@@ -85,28 +83,9 @@ actor CDPClient {
       let message = try await receiveWebSocketMessage(from: ws)
       switch message {
       case .string(let text):
-        guard let responseData = text.data(using: .utf8),
-          let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-          let responseId = json["id"] as? Int,
-          responseId == id
-        else {
-          continue  // Skip CDP events, wait for our response
+        if let result = try Self.parseScreenshotResponse(text, expectedId: id, page: page) {
+          return result
         }
-
-        // Check for CDP protocol-level errors
-        if let error = json["error"] as? [String: Any] {
-          let message = error["message"] as? String ?? "Unknown CDP error"
-          throw CDPError.protocolError(message)
-        }
-
-        guard let result = json["result"] as? [String: Any],
-          let base64String = result["data"] as? String,
-          let jpeg = Data(base64Encoded: base64String)
-        else {
-          throw CDPError.invalidResponse
-        }
-
-        return ScreenshotResult(jpeg: jpeg, url: page.url, title: page.title)
 
       case .data:
         continue  // Skip binary messages
@@ -135,6 +114,45 @@ actor CDPClient {
       case .protocolError(let msg): "CDP error: \(msg)"
       }
     }
+  }
+
+  static func parseScreenshotResponse(
+    _ text: String,
+    expectedId: Int,
+    page: PageInfo
+  ) throws -> ScreenshotResult? {
+    guard let responseData = text.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+      let responseId = json["id"] as? Int,
+      responseId == expectedId
+    else {
+      return nil
+    }
+
+    if let error = json["error"] as? [String: Any] {
+      let message = error["message"] as? String ?? "Unknown CDP error"
+      throw CDPError.protocolError(message)
+    }
+
+    guard let result = json["result"] as? [String: Any],
+      let base64String = result["data"] as? String,
+      let jpeg = Data(base64Encoded: base64String)
+    else {
+      throw CDPError.invalidResponse
+    }
+
+    return ScreenshotResult(jpeg: jpeg, url: page.url, title: page.title)
+  }
+
+  static func pageForScreenshot(from pages: [PageInfo]) -> PageInfo? {
+    pages.first(where: { page in
+      guard page.type == "page",
+        let url = page.url?.trimmingCharacters(in: .whitespacesAndNewlines)
+      else {
+        return false
+      }
+      return !url.isEmpty && url != "about:blank"
+    }) ?? pages.first(where: { $0.type == "page" })
   }
 
   private func withTimeout<T: Sendable>(
