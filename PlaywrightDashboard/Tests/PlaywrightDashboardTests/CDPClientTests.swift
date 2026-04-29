@@ -92,6 +92,58 @@ struct CDPClientTests {
     #expect(CDPClient.pageForScreenshot(from: pages)?.id == "app")
   }
 
+  @Test("mouse event params build CDP click payloads")
+  func mouseEventParams() {
+    let params = CDPClient.mouseEventParams(
+      type: "mousePressed", x: 12.5, y: 30, button: "left", clickCount: 1)
+
+    #expect(params["type"] as? String == "mousePressed")
+    #expect(params["x"] as? Double == 12.5)
+    #expect(params["y"] as? Double == 30)
+    #expect(params["button"] as? String == "left")
+    #expect(params["clickCount"] as? Int == 1)
+  }
+
+  @Test("mouse wheel params build CDP scroll payloads")
+  func mouseWheelParams() {
+    let params = CDPClient.mouseWheelParams(x: 100, y: 200, deltaX: 0, deltaY: -40)
+
+    #expect(params["type"] as? String == "mouseWheel")
+    #expect(params["x"] as? Double == 100)
+    #expect(params["y"] as? Double == 200)
+    #expect(params["button"] as? String == "none")
+    #expect(params["deltaX"] as? Double == 0)
+    #expect(params["deltaY"] as? Double == -40)
+  }
+
+  @Test("commandString serializes command id method and params")
+  func commandString() throws {
+    let text = try CDPClient.commandString(
+      id: 3,
+      method: "Input.dispatchMouseEvent",
+      params: CDPClient.mouseEventParams(
+        type: "mouseReleased", x: 12, y: 34, button: "left", clickCount: 1)
+    )
+
+    #expect(text.contains(#""id":3"#))
+    #expect(text.contains(#""method":"Input.dispatchMouseEvent""#))
+    #expect(text.contains(#""type":"mouseReleased""#))
+  }
+
+  @Test("isCommandResponse skips events and throws protocol errors")
+  func isCommandResponse() throws {
+    #expect(try CDPClient.isCommandResponse(#"{"method":"Page.event"}"#, expectedId: 3) == false)
+    #expect(try CDPClient.isCommandResponse(#"{"id":3,"result":{}}"#, expectedId: 3))
+
+    do {
+      _ = try CDPClient.isCommandResponse(
+        #"{"id":3,"error":{"message":"Bad input"}}"#, expectedId: 3)
+      Issue.record("Expected command response parsing to throw")
+    } catch let error as CDPClient.CDPError {
+      #expect(error.errorDescription == "CDP error: Bad input")
+    }
+  }
+
   @Test("listPages times out when CDP HTTP endpoint accepts but does not respond")
   func listPagesTimeout() async throws {
     let server = try HangingHTTPServer()

@@ -5,6 +5,7 @@ struct SessionInfoBar: View {
   let session: SessionRecord
   let onBack: () -> Void
   @Binding var showMetadata: Bool
+  @Binding var interactionEnabled: Bool
   @State private var isEditing = false
   @State private var editText = ""
   @FocusState private var isFieldFocused: Bool
@@ -88,6 +89,16 @@ struct SessionInfoBar: View {
       .buttonStyle(.plain)
       .disabled(session.cdpPort <= 0)
       .help("Open CDP inspector")
+
+      Button {
+        interactionEnabled.toggle()
+      } label: {
+        Image(systemName: interactionEnabled ? "cursorarrow.click.2" : "cursorarrow.click")
+          .font(.body)
+      }
+      .buttonStyle(.plain)
+      .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
+      .help(interactionEnabled ? "Disable interaction" : "Enable interaction")
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {
