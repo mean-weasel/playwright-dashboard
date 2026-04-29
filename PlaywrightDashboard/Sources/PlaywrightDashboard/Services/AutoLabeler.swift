@@ -12,12 +12,8 @@ struct AutoLabeler {
   static func label(for record: SessionRecord) -> String {
     let result: String
 
-    // Priority 1: user-set custom name
-    if let custom = record.customName, !custom.isEmpty {
-      result = custom
-    }
-    // Priority 2: workspace/worktree branch name
-    else if !record.workspaceName.isEmpty {
+    // Priority 1: workspace/worktree branch name
+    if !record.workspaceName.isEmpty {
       let titled = titleCase(workspaceName: record.workspaceName)
       if !titled.isEmpty {
         result = titled
@@ -25,7 +21,7 @@ struct AutoLabeler {
         result = fallback(for: record)
       }
     }
-    // Priority 3 & 4: lastTitle or sessionId
+    // Priority 2 & 3: lastTitle or sessionId
     else {
       result = fallback(for: record)
     }

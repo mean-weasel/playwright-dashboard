@@ -19,7 +19,7 @@ permissions:
 jobs:
   detect-changes:
     name: Detect Changed Paths
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 5
     if: github.event_name == 'pull_request'
     outputs:
@@ -38,6 +38,7 @@ jobs:
               - 'PlaywrightDashboard/Package.swift'
               - 'Makefile'
               - '.github/**'
+              - '*.html'
 
   lint:
     name: Lint
@@ -96,15 +97,18 @@ jobs:
         if: always()
         run: |
           echo "## Test Results" >> "$GITHUB_STEP_SUMMARY"
-          if grep -q "Test Suite.*passed" PlaywrightDashboard/test.log 2>/dev/null; then
-            grep "Test Suite\|Executed\|passed\|failed" PlaywrightDashboard/test.log >> "$GITHUB_STEP_SUMMARY"
+          if grep -q "Test run with .* tests" PlaywrightDashboard/test.log 2>/dev/null; then
+            grep "Test run with .* tests" PlaywrightDashboard/test.log >> "$GITHUB_STEP_SUMMARY"
+          elif grep -q "Test Suite.*passed" PlaywrightDashboard/test.log 2>/dev/null; then
+            grep "Test Suite\|Executed\|passed\|failed" PlaywrightDashboard/test.log \
+              | grep -v "Executed 0 tests" >> "$GITHUB_STEP_SUMMARY" || true
           else
             echo "_No test results found (test target may not exist yet)._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   file-size-check:
     name: File Size Check
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 2
     needs: [detect-changes]
     if: >-
@@ -122,9 +126,39 @@ jobs:
             exit 1
           fi
 
+  mockup-check:
+    name: Mockup Check
+    runs-on: macos-15
+    timeout-minutes: 2
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate mockup files
+        run: make mockups
+
+  package-check:
+    name: Package Check
+    runs-on: macos-15
+    timeout-minutes: 15
+    needs: [detect-changes]
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.code == 'true')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Build app bundle
+        run: make validate-package
+
   ci-gate:
     name: CI Gate
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 5
     if: always()
     needs:
@@ -132,6 +166,8 @@ jobs:
       - build
       - unit-tests
       - file-size-check
+      - mockup-check
+      - package-check
     steps:
       - name: Check required jobs
         env:
@@ -139,9 +175,11 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           TEST_RESULT: ${{ needs.unit-tests.result }}
           SIZE_RESULT: ${{ needs.file-size-check.result }}
+          MOCKUP_RESULT: ${{ needs.mockup-check.result }}
+          PACKAGE_RESULT: ${{ needs.package-check.result }}
         run: |
-          echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Size: $SIZE_RESULT"
-          for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$SIZE_RESULT"; do
+          echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Size: $SIZE_RESULT, Mockups: $MOCKUP_RESULT, Package: $PACKAGE_RESULT"
+          for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$SIZE_RESULT" "$MOCKUP_RESULT" "$PACKAGE_RESULT"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               echo "A required job reported: $result"
               exit 1

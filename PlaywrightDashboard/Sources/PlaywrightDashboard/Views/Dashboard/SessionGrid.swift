@@ -3,7 +3,6 @@ import SwiftUI
 
 struct SessionGrid: View {
   @Environment(AppState.self) private var appState
-  @Environment(\.modelContext) private var modelContext
 
   let filter: SidebarFilter?
   @Binding var searchText: String
