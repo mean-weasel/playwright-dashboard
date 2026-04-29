@@ -219,6 +219,86 @@ struct AppStateTests {
     #expect(appState.sessionTerminationErrors["fail-close"]?.contains("missing session") == true)
   }
 
+  @Test("dismissTerminationError removes one recorded error")
+  func dismissTerminationError() async throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(name: "fail-close", workspace: harness.workspace("fail-close"))
+    ])
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      sessionTerminator: SessionTerminator { _ in
+        ProcessResult(exitStatus: 2, output: "missing session")
+      }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    let session = try #require(appState.sessions.first)
+    appState.closeAndTerminate(session)
+    try await Task.sleep(for: .milliseconds(50))
+
+    appState.dismissTerminationError(sessionId: "fail-close")
+
+    #expect(appState.sessionTerminationErrors.isEmpty)
+  }
+
+  @Test("dismissAllTerminationErrors clears every recorded error")
+  func dismissAllTerminationErrors() async throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(name: "fail-one", workspace: harness.workspace("fail-one")),
+      try harness.writeSession(name: "fail-two", workspace: harness.workspace("fail-two")),
+    ])
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      sessionTerminator: SessionTerminator { _ in
+        ProcessResult(exitStatus: 2, output: "missing session")
+      }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    for session in appState.sessions {
+      appState.closeAndTerminate(session)
+    }
+    try await Task.sleep(for: .milliseconds(50))
+
+    appState.dismissAllTerminationErrors()
+
+    #expect(appState.sessionTerminationErrors.isEmpty)
+  }
+
+  @Test("closeAndTerminateStaleSessions records termination errors")
+  func closeAndTerminateStaleSessionsRecordsErrors() async throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(name: "stale-one", workspace: harness.workspace("stale-one")),
+      try harness.writeSession(name: "stale-two", workspace: harness.workspace("stale-two")),
+    ])
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      sessionTerminator: SessionTerminator { _ in
+        ProcessResult(exitStatus: 2, output: "missing session")
+      }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    for session in appState.sessions {
+      session.status = .stale
+    }
+
+    appState.closeAndTerminateStaleSessions()
+    try await Task.sleep(for: .milliseconds(50))
+
+    #expect(appState.sessions.allSatisfy { $0.status == .closed })
+    #expect(Set(appState.sessionTerminationErrors.keys) == ["stale-one", "stale-two"])
+  }
+
   @Test("saveScreenshot writes JPEG data to the configured directory")
   func saveScreenshotWritesFile() throws {
     let harness = try TestSessionHarness()

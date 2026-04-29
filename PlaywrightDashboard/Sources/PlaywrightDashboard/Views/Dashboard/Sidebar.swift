@@ -40,6 +40,43 @@ struct Sidebar: View {
 
       Divider()
 
+      if !appState.sessionTerminationErrors.isEmpty {
+        Section("Close Errors") {
+          ForEach(terminationErrors, id: \.sessionId) { item in
+            VStack(alignment: .leading, spacing: 3) {
+              HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .foregroundStyle(.orange)
+                Text(item.sessionId)
+                  .font(.caption)
+                  .lineLimit(1)
+                Spacer()
+                Button {
+                  appState.dismissTerminationError(sessionId: item.sessionId)
+                } label: {
+                  Image(systemName: "xmark")
+                    .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss")
+              }
+              Text(item.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+            .padding(.vertical, 2)
+          }
+
+          Button {
+            appState.dismissAllTerminationErrors()
+          } label: {
+            Label("Dismiss All", systemImage: "xmark.circle")
+          }
+          .buttonStyle(.plain)
+        }
+      }
+
       Section("Workspaces") {
         ForEach(workspaces, id: \.name) { workspace in
           sidebarRow(
@@ -117,6 +154,12 @@ struct Sidebar: View {
 
   private var staleCount: Int {
     appState.sessions.filter { $0.status == .stale }.count
+  }
+
+  private var terminationErrors: [(sessionId: String, message: String)] {
+    appState.sessionTerminationErrors
+      .map { (sessionId: $0.key, message: $0.value) }
+      .sorted { $0.sessionId.localizedCaseInsensitiveCompare($1.sessionId) == .orderedAscending }
   }
 
   private var workspaces: [(name: String, count: Int)] {
