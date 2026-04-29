@@ -3,13 +3,16 @@
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
 BUILD_DIR := $(PKG_DIR)/.build
+CONFIGURATION ?= release
+BUILD_CONFIG_FLAG := -c $(CONFIGURATION)
+SWIFT_BUILD_DIR := $(BUILD_DIR)/$(CONFIGURATION)
 INSTALL_DIR := $(HOME)/Applications
 APP_BUNDLE := $(INSTALL_DIR)/$(APP_NAME).app
 DIST_DIR := dist
 PACKAGE_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 
 build:
-	cd $(PKG_DIR) && swift build
+	cd $(PKG_DIR) && swift build $(BUILD_CONFIG_FLAG)
 
 test:
 	cd $(PKG_DIR) && swift test
@@ -44,7 +47,7 @@ mockups:
 $(PACKAGE_BUNDLE): build
 	rm -rf $(PACKAGE_BUNDLE)
 	mkdir -p $(PACKAGE_BUNDLE)/Contents/MacOS
-	cp $(BUILD_DIR)/debug/$(APP_NAME) $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
+	cp $(SWIFT_BUILD_DIR)/$(APP_NAME) $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	chmod +x $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
@@ -57,10 +60,18 @@ $(PACKAGE_BUNDLE): build
 		'  <string>com.neonwatty.PlaywrightDashboard</string>' \
 		'  <key>CFBundleName</key>' \
 		'  <string>$(APP_NAME)</string>' \
+		'  <key>CFBundleDisplayName</key>' \
+		'  <string>Playwright Dashboard</string>' \
 		'  <key>CFBundlePackageType</key>' \
 		'  <string>APPL</string>' \
+		'  <key>CFBundleShortVersionString</key>' \
+		'  <string>0.1.0</string>' \
 		'  <key>CFBundleVersion</key>' \
 		'  <string>1</string>' \
+		'  <key>LSApplicationCategoryType</key>' \
+		'  <string>public.app-category.developer-tools</string>' \
+		'  <key>NSHumanReadableCopyright</key>' \
+		'  <string>Copyright © 2026 Neon Watty</string>' \
 		'  <key>LSMinimumSystemVersion</key>' \
 		'  <string>15.0</string>' \
 		'</dict>' \
@@ -94,9 +105,7 @@ smoke-app: validate-package
 		exit 2; \
 	fi
 	open $(PACKAGE_BUNDLE)
-	@sleep 2
-	@pgrep -x $(APP_NAME) >/dev/null
-	@osascript -e 'tell application "$(APP_NAME)" to quit' >/dev/null 2>&1 || true
+	osascript scripts/smoke_app.applescript
 
 smoke-login-item:
 	@if [ "$$RUN_LOGIN_ITEM_SMOKE" != "1" ]; then \
@@ -110,11 +119,12 @@ smoke-live-cdp:
 		echo "Set RUN_LIVE_CDP_SMOKE=1 to run against a live Playwright/CDP browser session"; \
 		exit 2; \
 	fi
-	@if [ -z "$$LIVE_CDP_PORT" ]; then \
-		echo "Set LIVE_CDP_PORT to the browser's remote debugging port"; \
+	@PORT="$${LIVE_CDP_PORT:-$$(scripts/discover_live_cdp_port.swift)}"; \
+	if [ -z "$$PORT" ]; then \
+		echo "Set LIVE_CDP_PORT or start a Playwright daemon session with CDP enabled"; \
 		exit 2; \
-	fi
-	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$LIVE_CDP_PORT swift test --filter CDPClientLiveSmokeTests
+	fi; \
+	cd $(PKG_DIR) && RUN_LIVE_CDP_SMOKE=1 LIVE_CDP_PORT=$$PORT swift test --filter CDPClientLiveSmokeTests
 
 install: package
 	mkdir -p $(INSTALL_DIR)

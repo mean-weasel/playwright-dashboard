@@ -83,6 +83,17 @@ struct SettingsView: View {
         }
       }
 
+      LabeledContent("Playwright CLI") {
+        HStack(spacing: 8) {
+          Image(
+            systemName: appState.playwrightCLIStatus.isAvailable
+              ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+          )
+          .foregroundStyle(appState.playwrightCLIStatus.isAvailable ? .green : .orange)
+          Text(appState.playwrightCLIStatus.displayText)
+        }
+      }
+
       Button("Clear Closed History", role: .destructive) {
         showClearClosedConfirmation = true
       }
@@ -113,6 +124,7 @@ struct SettingsView: View {
     .onAppear {
       // Sync toggle with actual plist state on disk
       launchAtLogin = LaunchAtLoginManager.isEnabled
+      appState.refreshPlaywrightCLIStatus()
     }
   }
 }

@@ -11,6 +11,7 @@ final class AppState {
   var selectedSessionId: String?
   private(set) var sessionTerminationErrors: [String: String] = [:]
   private(set) var lastSavedScreenshotURL: URL?
+  private(set) var playwrightCLIStatus: PlaywrightCLIStatus = .unknown
 
   // Services
   private let sessionFileProvider: @MainActor () -> [URL]
@@ -19,6 +20,7 @@ final class AppState {
   private let shouldStartScreenshots: Bool
   private let syncInterval: Duration
   private let sessionTerminator: SessionTerminator
+  private let cliStatusProvider: PlaywrightCLIStatusProvider
   private let screenshotDirectoryProvider: @MainActor () -> URL
   private var sessionManager: SessionManager?
   private let screenshotService = ScreenshotService()
@@ -33,6 +35,7 @@ final class AppState {
     self.shouldStartScreenshots = true
     self.syncInterval = .seconds(2)
     self.sessionTerminator = SessionTerminator()
+    self.cliStatusProvider = PlaywrightCLIStatusProvider()
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
   }
 
@@ -43,6 +46,7 @@ final class AppState {
     shouldStartScreenshots: Bool = false,
     syncInterval: Duration = .seconds(2),
     sessionTerminator: SessionTerminator = SessionTerminator(),
+    cliStatusProvider: PlaywrightCLIStatusProvider = PlaywrightCLIStatusProvider(),
     screenshotDirectoryProvider: @escaping @MainActor () -> URL =
       AppState.defaultScreenshotDirectory
   ) {
@@ -52,6 +56,7 @@ final class AppState {
     self.shouldStartScreenshots = shouldStartScreenshots
     self.syncInterval = syncInterval
     self.sessionTerminator = sessionTerminator
+    self.cliStatusProvider = cliStatusProvider
     self.screenshotDirectoryProvider = screenshotDirectoryProvider
   }
 
@@ -115,6 +120,12 @@ final class AppState {
     }
   }
 
+  func retryTerminate(_ session: SessionRecord) {
+    Task {
+      await terminate(session)
+    }
+  }
+
   func reopen(_ session: SessionRecord) {
     session.reopen()
     saveSessionChanges()
@@ -148,6 +159,12 @@ final class AppState {
 
   func dismissAllTerminationErrors() {
     sessionTerminationErrors.removeAll()
+  }
+
+  func refreshPlaywrightCLIStatus() {
+    Task {
+      playwrightCLIStatus = await cliStatusProvider.status()
+    }
   }
 
   func clearClosedSessions() {

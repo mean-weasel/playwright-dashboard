@@ -37,6 +37,7 @@ jobs:
               - 'PlaywrightDashboard/Tests/**'
               - 'PlaywrightDashboard/Package.swift'
               - 'Makefile'
+              - 'scripts/**'
               - '.github/**'
               - '*.html'
 

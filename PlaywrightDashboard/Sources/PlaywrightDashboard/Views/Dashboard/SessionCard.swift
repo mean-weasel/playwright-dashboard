@@ -15,6 +15,10 @@ struct SessionCard: View {
       ZStack(alignment: .topTrailing) {
         screenshotArea
         statusOverlay
+        if appState.sessionTerminationErrors[session.sessionId] != nil {
+          terminationWarningOverlay
+            .padding(6)
+        }
       }
       .aspectRatio(16.0 / 10.0, contentMode: .fit)
       .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -74,6 +78,16 @@ struct SessionCard: View {
       } else {
         Button("Close Session", role: .destructive) {
           appState.closeAndTerminate(session)
+        }
+      }
+
+      if appState.sessionTerminationErrors[session.sessionId] != nil {
+        Divider()
+        Button("Retry Close") {
+          appState.retryTerminate(session)
+        }
+        Button("Dismiss Close Error") {
+          appState.dismissTerminationError(sessionId: session.sessionId)
         }
       }
     }
@@ -147,5 +161,14 @@ struct SessionCard: View {
   private var staleReason: String {
     StaleLabelFormatter.reason(
       lastURL: session.lastURL, thresholdSeconds: staleThresholdSeconds)
+  }
+
+  private var terminationWarningOverlay: some View {
+    Image(systemName: "exclamationmark.triangle.fill")
+      .font(.caption)
+      .foregroundStyle(.orange)
+      .padding(5)
+      .background(.ultraThinMaterial, in: Circle())
+      .help(appState.sessionTerminationErrors[session.sessionId] ?? "Close failed")
   }
 }
