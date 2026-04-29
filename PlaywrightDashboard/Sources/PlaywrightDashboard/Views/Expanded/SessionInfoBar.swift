@@ -98,6 +98,8 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
+      .accessibilityLabel(interactionEnabled ? "Disable interaction" : "Enable interaction")
+      .accessibilityIdentifier("expanded-interaction-toggle")
       .help(interactionEnabled ? "Disable interaction" : "Enable interaction")
 
       Button {

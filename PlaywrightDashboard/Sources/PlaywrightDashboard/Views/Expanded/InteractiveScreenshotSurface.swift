@@ -54,6 +54,9 @@ struct InteractiveScreenshotSurface: View {
           .offset(x: imageFrame.minX, y: imageFrame.minY)
         }
       }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Browser screenshot")
+      .accessibilityIdentifier("expanded-screenshot-surface")
     }
   }
 }

@@ -193,6 +193,8 @@ struct MenubarPopover: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(session.displayName)
+    .accessibilityIdentifier("menubar-session-row-\(session.sessionId)")
   }
 
   private var footer: some View {

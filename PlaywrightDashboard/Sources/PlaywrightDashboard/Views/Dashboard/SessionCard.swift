@@ -64,6 +64,9 @@ struct SessionCard: View {
     .onTapGesture {
       onSelect?()
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(session.displayName)
+    .accessibilityIdentifier("session-card-\(session.sessionId)")
     .contextMenu {
       Button("Rename...") {
         onRename?()
