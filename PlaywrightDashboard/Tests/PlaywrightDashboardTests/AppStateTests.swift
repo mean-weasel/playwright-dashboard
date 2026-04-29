@@ -322,6 +322,21 @@ struct AppStateTests {
     #expect(appState.lastSavedScreenshotURL == savedURL)
   }
 
+  @Test("refreshPlaywrightCLIStatus publishes provider status")
+  func refreshPlaywrightCLIStatus() async {
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      cliStatusProvider: PlaywrightCLIStatusProvider { _ in
+        ProcessResult(exitStatus: 0, output: "2.0.0\n")
+      }
+    )
+
+    appState.refreshPlaywrightCLIStatus()
+    try? await Task.sleep(for: .milliseconds(50))
+
+    #expect(appState.playwrightCLIStatus == .available("2.0.0"))
+  }
+
   @MainActor
   private final class WatchState {
     var startCount = 0
