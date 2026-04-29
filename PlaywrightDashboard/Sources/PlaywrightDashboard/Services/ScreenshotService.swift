@@ -10,7 +10,9 @@ private let logger = Logger(subsystem: "PlaywrightDashboard", category: "Screens
 @MainActor
 final class ScreenshotService {
   /// Interval between capture cycles.
-  private let interval: TimeInterval = 5
+  private var interval: Duration {
+    DashboardSettings.thumbnailRefreshDuration()
+  }
   /// How long since last activity before marking a session stale.
   /// 0 means stale detection is disabled ("Never").
   private var staleThreshold: TimeInterval {
@@ -26,10 +28,9 @@ final class ScreenshotService {
     task = Task { [weak self, weak appState] in
       while !Task.isCancelled {
         guard let self, let appState else { return }
-        await self.captureAll(
-          sessions: appState.sessions, selectedSessionId: appState.selectedSessionId)
+        await self.captureAll(appState: appState)
         do {
-          try await Task.sleep(for: .seconds(self.interval))
+          try await Task.sleep(for: self.interval)
         } catch { break }
       }
     }
@@ -43,7 +44,10 @@ final class ScreenshotService {
 
   // MARK: - Private
 
-  private func captureAll(sessions: [SessionRecord], selectedSessionId: String?) async {
+  private func captureAll(appState: AppState) async {
+    let sessions = appState.sessions
+    let selectedSessionId = appState.selectedSessionId
+
     // Gather targets on the main actor, skipping the session displayed in expanded view
     // (its dedicated fast-refresh loop handles captures to avoid dual-writer conflicts)
     let targets: [(sessionId: String, port: Int)] =
@@ -59,7 +63,8 @@ final class ScreenshotService {
         let client = getClient(for: target.port)
         group.addTask {
           do {
-            let result = try await client.captureScreenshot(quality: 50)
+            let result = try await client.captureScreenshot(
+              quality: DashboardSettings.thumbnailQuality())
             return (target.sessionId, result)
           } catch is CancellationError {
             return (target.sessionId, nil)
@@ -79,13 +84,16 @@ final class ScreenshotService {
     }
 
     // Apply results back on the main actor
+    var didUpdateSession = false
     for (sessionId, result) in results {
       guard let session = sessions.first(where: { $0.sessionId == sessionId }) else {
         continue
       }
+      guard session.status != .closed else { continue }
 
       if let result {
         session.updateFromScreenshot(result)
+        didUpdateSession = true
       } else {
         // CDP connection failed — mark stale if inactive long enough
         let threshold = staleThreshold
@@ -95,9 +103,14 @@ final class ScreenshotService {
             && session.lastActivityAt < staleCutoff
           {
             session.status = .stale
+            didUpdateSession = true
           }
         }
       }
+    }
+
+    if didUpdateSession {
+      appState.saveSessionChanges()
     }
   }
 

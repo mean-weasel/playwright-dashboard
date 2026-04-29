@@ -7,6 +7,91 @@ import Testing
 @Suite("CDPClient")
 struct CDPClientTests {
 
+  @Test("parseScreenshotResponse returns result for matching response")
+  func parseScreenshotResponseSuccess() throws {
+    let page = makePage(url: "https://example.com", title: "Example")
+    let jpeg = Data([0x01, 0x02, 0x03])
+    let response = """
+      {"id":7,"result":{"data":"\(jpeg.base64EncodedString())"}}
+      """
+
+    let result = try CDPClient.parseScreenshotResponse(response, expectedId: 7, page: page)
+
+    #expect(result?.jpeg == jpeg)
+    #expect(result?.url == "https://example.com")
+    #expect(result?.title == "Example")
+  }
+
+  @Test("parseScreenshotResponse skips events and other command responses")
+  func parseScreenshotResponseSkipsUnrelatedMessages() throws {
+    let page = makePage()
+
+    let event = try CDPClient.parseScreenshotResponse(
+      #"{"method":"Page.loadEventFired","params":{}}"#, expectedId: 7, page: page)
+    let otherResponse = try CDPClient.parseScreenshotResponse(
+      #"{"id":8,"result":{"data":"AQID"}}"#, expectedId: 7, page: page)
+
+    #expect(event == nil)
+    #expect(otherResponse == nil)
+  }
+
+  @Test("parseScreenshotResponse throws protocol errors")
+  func parseScreenshotResponseProtocolError() throws {
+    let page = makePage()
+
+    do {
+      _ = try CDPClient.parseScreenshotResponse(
+        #"{"id":7,"error":{"message":"Browser failed"}}"#, expectedId: 7, page: page)
+      Issue.record("Expected parseScreenshotResponse to throw")
+    } catch let error as CDPClient.CDPError {
+      #expect(error.errorDescription == "CDP error: Browser failed")
+    }
+  }
+
+  @Test("parseScreenshotResponse throws for malformed matching responses")
+  func parseScreenshotResponseInvalidResponse() throws {
+    let page = makePage()
+
+    do {
+      _ = try CDPClient.parseScreenshotResponse(
+        #"{"id":7,"result":{}}"#, expectedId: 7, page: page)
+      Issue.record("Expected parseScreenshotResponse to throw")
+    } catch let error as CDPClient.CDPError {
+      #expect(error.errorDescription == "Invalid screenshot response from CDP")
+    }
+  }
+
+  @Test("pageForScreenshot prefers a navigated page")
+  func pageForScreenshotPrefersNavigatedPage() {
+    let pages = [
+      makePage(id: "blank", url: "about:blank"),
+      makePage(id: "empty", url: ""),
+      makePage(id: "app", url: "http://localhost:3000"),
+    ]
+
+    #expect(CDPClient.pageForScreenshot(from: pages)?.id == "app")
+  }
+
+  @Test("pageForScreenshot falls back to the first page")
+  func pageForScreenshotFallsBackToFirstPage() {
+    let pages = [
+      makePage(id: "blank", url: "about:blank"),
+      makePage(id: "empty", url: ""),
+    ]
+
+    #expect(CDPClient.pageForScreenshot(from: pages)?.id == "blank")
+  }
+
+  @Test("pageForScreenshot ignores non-page targets")
+  func pageForScreenshotIgnoresNonPageTargets() {
+    let pages = [
+      makePage(id: "service-worker", type: "service_worker", url: "http://localhost/worker.js"),
+      makePage(id: "app", type: "page", url: "http://localhost:3000"),
+    ]
+
+    #expect(CDPClient.pageForScreenshot(from: pages)?.id == "app")
+  }
+
   @Test("listPages times out when CDP HTTP endpoint accepts but does not respond")
   func listPagesTimeout() async throws {
     let server = try HangingHTTPServer()
@@ -22,6 +107,21 @@ struct CDPClientTests {
     } catch {
       #expect(Date().timeIntervalSince(startedAt) < 2)
     }
+  }
+
+  private func makePage(
+    id: String = "page-1",
+    type: String = "page",
+    url: String? = "about:blank",
+    title: String? = nil
+  ) -> CDPClient.PageInfo {
+    CDPClient.PageInfo(
+      id: id,
+      type: type,
+      url: url,
+      title: title,
+      webSocketDebuggerUrl: "ws://localhost/devtools/page/\(id)"
+    )
   }
 
   private final class HangingHTTPServer: @unchecked Sendable {

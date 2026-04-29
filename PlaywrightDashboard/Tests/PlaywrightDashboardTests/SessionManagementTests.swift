@@ -123,29 +123,10 @@ struct SidebarFilterTests {
     return [active, idle, stale, closed]
   }
 
-  private func filter(
-    _ sessions: [SessionRecord], by sidebarFilter: SidebarFilter?
-  ) -> [SessionRecord] {
-    var result = sessions
-    switch sidebarFilter {
-    case .allOpen:
-      result = result.filter { $0.status != .closed }
-    case .idleStale:
-      result = result.filter { $0.status == .idle || $0.status == .stale }
-    case .closed:
-      result = result.filter { $0.status == .closed }
-    case .workspace(let name):
-      result = result.filter { $0.projectName == name && $0.status != .closed }
-    case nil:
-      result = result.filter { $0.status != .closed }
-    }
-    return result
-  }
-
   @Test("allOpen excludes closed sessions")
   func allOpen() {
     let sessions = makeSessions()
-    let filtered = filter(sessions, by: .allOpen)
+    let filtered = SessionFiltering.filter(sessions, by: .allOpen)
     #expect(filtered.count == 3)
     #expect(filtered.allSatisfy { $0.status != .closed })
   }
@@ -153,7 +134,7 @@ struct SidebarFilterTests {
   @Test("idleStale returns only idle and stale")
   func idleStale() {
     let sessions = makeSessions()
-    let filtered = filter(sessions, by: .idleStale)
+    let filtered = SessionFiltering.filter(sessions, by: .idleStale)
     #expect(filtered.count == 2)
     #expect(filtered.allSatisfy { $0.status == .idle || $0.status == .stale })
   }
@@ -161,7 +142,7 @@ struct SidebarFilterTests {
   @Test("closed returns only closed sessions")
   func closed() {
     let sessions = makeSessions()
-    let filtered = filter(sessions, by: .closed)
+    let filtered = SessionFiltering.filter(sessions, by: .closed)
     #expect(filtered.count == 1)
     #expect(filtered[0].sessionId == "closed-1")
   }
@@ -169,7 +150,7 @@ struct SidebarFilterTests {
   @Test("nil filter excludes closed (same as allOpen)")
   func nilFilter() {
     let sessions = makeSessions()
-    let filtered = filter(sessions, by: nil)
+    let filtered = SessionFiltering.filter(sessions, by: nil)
     #expect(filtered.count == 3)
     #expect(filtered.allSatisfy { $0.status != .closed })
   }
@@ -178,8 +159,15 @@ struct SidebarFilterTests {
   func workspaceFilter() {
     let sessions = makeSessions()
     // app-a has: active, idle, closed — filter should return active + idle only
-    let filtered = filter(sessions, by: .workspace("app-a"))
+    let filtered = SessionFiltering.filter(sessions, by: .workspace("app-a"))
     #expect(filtered.count == 2)
     #expect(filtered.allSatisfy { $0.projectName == "app-a" && $0.status != .closed })
+  }
+
+  @Test("search matches project name")
+  func searchProjectName() {
+    let sessions = makeSessions()
+    let filtered = SessionFiltering.filter(sessions, by: .allOpen, searchText: "app-b")
+    #expect(filtered.map(\.sessionId) == ["stale-1"])
   }
 }

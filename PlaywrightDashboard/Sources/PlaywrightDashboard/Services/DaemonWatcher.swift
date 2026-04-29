@@ -53,10 +53,12 @@ final class DaemonWatcher {
     timer.schedule(deadline: .now(), repeating: .seconds(2))
     timer.setEventHandler { [weak self] in
       guard let self else { return }
-      if self.fileManager.fileExists(atPath: path) {
+      let directoryExists = FileManager.default.fileExists(atPath: path)
+      guard directoryExists else { return }
+      Task { @MainActor in
         self.directoryCheckTimer?.cancel()
         self.directoryCheckTimer = nil
-        Task { @MainActor in
+        if self.stream == nil {
           self.startWatching(path: path)
         }
       }

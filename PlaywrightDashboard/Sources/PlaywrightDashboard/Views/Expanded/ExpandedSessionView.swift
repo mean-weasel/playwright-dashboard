@@ -112,9 +112,14 @@ struct ExpandedSessionView: View {
     let client = CDPClient(port: session.cdpPort)
 
     while !Task.isCancelled {
+      guard session.status != .closed else { break }
+
       do {
-        let result = try await client.captureScreenshot(quality: 60)
+        let result = try await client.captureScreenshot(
+          quality: DashboardSettings.expandedQuality())
+        guard session.status != .closed else { break }
         session.updateFromScreenshot(result)
+        appState.saveSessionChanges()
         consecutiveFailures = 0
       } catch is CancellationError {
         break
@@ -126,7 +131,7 @@ struct ExpandedSessionView: View {
       }
 
       do {
-        try await Task.sleep(for: .seconds(1.5))
+        try await Task.sleep(for: DashboardSettings.expandedRefreshDuration())
       } catch { break }
     }
   }

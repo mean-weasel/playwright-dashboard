@@ -13,9 +13,7 @@ struct PlaywrightDashboardApp: App {
 
   @MainActor
   init() {
-    UserDefaults.standard.register(defaults: [
-      "staleThresholdSeconds": 120
-    ])
+    UserDefaults.standard.register(defaults: DashboardSettings.registrationDefaults())
 
     let container = ModelContainerFactory.make()
     let state = AppState()
@@ -54,6 +52,7 @@ struct PlaywrightDashboardApp: App {
 
     Settings {
       SettingsView()
+        .environment(appState)
     }
   }
 

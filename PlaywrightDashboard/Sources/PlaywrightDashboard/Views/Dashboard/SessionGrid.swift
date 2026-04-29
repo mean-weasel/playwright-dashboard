@@ -48,8 +48,7 @@ struct SessionGrid: View {
       TextField("Session name", text: $renameText)
       Button("Save") {
         if let session = renamingSession {
-          let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-          session.customName = trimmed.isEmpty ? nil : trimmed
+          appState.rename(session, to: renameText)
         }
         renamingSession = nil
       }
@@ -110,7 +109,7 @@ struct SessionGrid: View {
     .draggable(session.sessionId)
     .dropDestination(for: String.self) { droppedIds, _ in
       guard let sourceId = droppedIds.first else { return false }
-      return reorder(sourceId: sourceId, targetId: session.sessionId)
+      return appState.reorder(sourceId: sourceId, targetId: session.sessionId)
     }
   }
 
@@ -143,45 +142,6 @@ struct SessionGrid: View {
   // MARK: - Filtering
 
   private var filteredSessions: [SessionRecord] {
-    var result = appState.sessions
-
-    switch filter {
-    case .allOpen:
-      result = result.filter { $0.status != .closed }
-    case .idleStale:
-      result = result.filter { $0.status == .idle || $0.status == .stale }
-    case .closed:
-      result = result.filter { $0.status == .closed }
-    case .workspace(let name):
-      result = result.filter { $0.projectName == name && $0.status != .closed }
-    case nil:
-      result = result.filter { $0.status != .closed }
-    }
-
-    if !searchText.isEmpty {
-      let query = searchText.lowercased()
-      result = result.filter { session in
-        session.autoLabel.lowercased().contains(query)
-          || session.sessionId.lowercased().contains(query)
-          || session.workspaceName.lowercased().contains(query)
-          || (session.lastURL?.lowercased().contains(query) ?? false)
-          || (session.customName?.lowercased().contains(query) ?? false)
-      }
-    }
-
-    result.sort { $0.gridOrder < $1.gridOrder }
-    return result
-  }
-
-  private func reorder(sourceId: String, targetId: String) -> Bool {
-    guard sourceId != targetId else { return false }
-    guard let source = appState.sessions.first(where: { $0.sessionId == sourceId }),
-      let target = appState.sessions.first(where: { $0.sessionId == targetId })
-    else { return false }
-
-    let temp = source.gridOrder
-    source.gridOrder = target.gridOrder
-    target.gridOrder = temp
-    return true
+    SessionFiltering.filter(appState.sessions, by: filter, searchText: searchText)
   }
 }

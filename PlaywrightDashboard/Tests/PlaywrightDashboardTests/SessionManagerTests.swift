@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 
 @testable import PlaywrightDashboard
@@ -77,6 +78,98 @@ struct SessionManagerTests {
 
     manager.syncWithWatcher()
 
+    #expect(manager.allSessions[0].status == .closed)
+    #expect(manager.allSessions[0].userClosed == true)
+  }
+
+  @Test("Purges expired closed sessions whose files are gone")
+  func purgesExpiredClosedSessions() throws {
+    let harness = try TestSessionHarness()
+    let expired = SessionRecord(
+      sessionId: "expired",
+      autoLabel: "Expired",
+      workspaceDir: harness.workspace("expired"),
+      cdpPort: 9222,
+      socketPath: "/tmp/expired.sock",
+      status: .closed,
+      createdAt: Date().addingTimeInterval(-3 * 60 * 60),
+      closedAt: Date().addingTimeInterval(-2 * 60 * 60)
+    )
+    harness.context.insert(expired)
+    try harness.context.save()
+
+    let manager = SessionManager(
+      sessionFileProvider: { [] },
+      modelContext: harness.context,
+      closedSessionRetentionProvider: { .seconds(60 * 60) }
+    )
+
+    manager.syncWithWatcher()
+
+    let saved = try harness.context.fetch(FetchDescriptor<SessionRecord>())
+    #expect(saved.isEmpty)
+    #expect(manager.allSessions.isEmpty)
+  }
+
+  @Test("Does not purge closed sessions when retention is disabled")
+  func retentionDisabledKeepsClosedSessions() throws {
+    let harness = try TestSessionHarness()
+    let closed = SessionRecord(
+      sessionId: "closed",
+      autoLabel: "Closed",
+      workspaceDir: harness.workspace("closed"),
+      cdpPort: 9222,
+      socketPath: "/tmp/closed.sock",
+      status: .closed,
+      createdAt: Date().addingTimeInterval(-3 * 60 * 60),
+      closedAt: Date().addingTimeInterval(-2 * 60 * 60)
+    )
+    harness.context.insert(closed)
+    try harness.context.save()
+
+    let manager = SessionManager(
+      sessionFileProvider: { [] },
+      modelContext: harness.context,
+      closedSessionRetentionProvider: { nil }
+    )
+
+    manager.syncWithWatcher()
+
+    #expect(manager.allSessions.map(\.sessionId) == ["closed"])
+  }
+
+  @Test("Does not purge user closed sessions while their files are live")
+  func liveUserClosedSessionIsNotPurged() throws {
+    let harness = try TestSessionHarness()
+    let liveFile = try harness.writeSession(
+      name: "live-hidden",
+      workspace: harness.workspace("live-hidden"),
+      port: 9222
+    )
+    let closed = SessionRecord(
+      sessionId: "live-hidden",
+      autoLabel: "Live Hidden",
+      workspaceDir: harness.workspace("live-hidden"),
+      cdpPort: 9222,
+      socketPath: "/tmp/live-hidden.sock",
+      status: .closed,
+      createdAt: Date().addingTimeInterval(-3 * 60 * 60),
+      closedAt: Date().addingTimeInterval(-2 * 60 * 60)
+    )
+    closed.userClosed = true
+    harness.context.insert(closed)
+    try harness.context.save()
+
+    let manager = SessionManager(
+      sessionFileProvider: { [liveFile] },
+      modelContext: harness.context,
+      closedSessionRetentionProvider: { .seconds(60 * 60) }
+    )
+
+    manager.syncWithWatcher()
+
+    #expect(manager.allSessions.count == 1)
+    #expect(manager.allSessions[0].sessionId == "live-hidden")
     #expect(manager.allSessions[0].status == .closed)
     #expect(manager.allSessions[0].userClosed == true)
   }

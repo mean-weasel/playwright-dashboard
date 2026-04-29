@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import PlaywrightDashboard
@@ -62,5 +63,33 @@ struct DeriveStatusTests {
   @Test("Localhost URL returns active")
   func localhost() {
     #expect(SessionRecord.deriveStatus(from: "http://localhost:3000") == .active)
+  }
+}
+
+@Suite("SessionRecord.updateFromScreenshot")
+struct ScreenshotUpdateTests {
+
+  @Test("does not revive a closed session")
+  func closedSessionIgnoresScreenshotUpdate() {
+    let session = SessionRecord(
+      sessionId: "closed-session",
+      autoLabel: "Closed",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      status: .closed
+    )
+    let result = CDPClient.ScreenshotResult(
+      jpeg: Data([0x01, 0x02]),
+      url: "http://localhost:3000",
+      title: "App"
+    )
+
+    session.updateFromScreenshot(result)
+
+    #expect(session.status == .closed)
+    #expect(session.lastScreenshot == nil)
+    #expect(session.lastURL == nil)
+    #expect(session.lastTitle == nil)
   }
 }
