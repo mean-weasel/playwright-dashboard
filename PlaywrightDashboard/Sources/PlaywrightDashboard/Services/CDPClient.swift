@@ -98,6 +98,27 @@ actor CDPClient {
     throw CDPError.timeout
   }
 
+  // MARK: - Input
+
+  func dispatchMouseClick(x: Double, y: Double) async throws {
+    try await sendCommand(
+      method: "Input.dispatchMouseEvent",
+      params: Self.mouseEventParams(type: "mousePressed", x: x, y: y, button: "left", clickCount: 1)
+    )
+    try await sendCommand(
+      method: "Input.dispatchMouseEvent",
+      params: Self.mouseEventParams(
+        type: "mouseReleased", x: x, y: y, button: "left", clickCount: 1)
+    )
+  }
+
+  func dispatchMouseWheel(x: Double, y: Double, deltaX: Double, deltaY: Double) async throws {
+    try await sendCommand(
+      method: "Input.dispatchMouseEvent",
+      params: Self.mouseWheelParams(x: x, y: y, deltaX: deltaX, deltaY: deltaY)
+    )
+  }
+
   // MARK: - Errors
 
   enum CDPError: Error, LocalizedError {
@@ -144,15 +165,33 @@ actor CDPClient {
     return ScreenshotResult(jpeg: jpeg, url: page.url, title: page.title)
   }
 
-  static func pageForScreenshot(from pages: [PageInfo]) -> PageInfo? {
-    pages.first(where: { page in
-      guard page.type == "page",
-        let url = page.url?.trimmingCharacters(in: .whitespacesAndNewlines)
-      else {
-        return false
+  private func sendCommand(method: String, params: [String: Any]) async throws {
+    let pages = try await listPages()
+    guard
+      let page = Self.pageForScreenshot(from: pages),
+      let wsURLString = page.webSocketDebuggerUrl,
+      let wsURL = URL(string: wsURLString)
+    else {
+      throw CDPError.noPages
+    }
+
+    let ws = session.webSocketTask(with: wsURL)
+    ws.resume()
+    defer { ws.cancel(with: .normalClosure, reason: nil) }
+
+    let id = nextId
+    nextId += 1
+    let commandString = try Self.commandString(id: id, method: method, params: params)
+    try await sendWebSocketMessage(.string(commandString), to: ws)
+
+    for _ in 0..<maxResponseMessages {
+      let message = try await receiveWebSocketMessage(from: ws)
+      if case .string(let text) = message, try Self.isCommandResponse(text, expectedId: id) {
+        return
       }
-      return !url.isEmpty && url != "about:blank"
-    }) ?? pages.first(where: { $0.type == "page" })
+    }
+
+    throw CDPError.timeout
   }
 
   private func withTimeout<T: Sendable>(

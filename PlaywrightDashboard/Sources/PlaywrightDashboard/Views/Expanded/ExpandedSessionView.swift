@@ -7,7 +7,9 @@ struct ExpandedSessionView: View {
   @Environment(AppState.self) private var appState
   let session: SessionRecord
   @AppStorage("expandedShowMetadata") private var showMetadata = true
+  @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
   @State private var consecutiveFailures = 0
+  @State private var inputClient: CDPClient?
 
   /// Show a warning after this many consecutive CDP failures (~7.5 seconds).
   private let failureWarningThreshold = 5
@@ -17,7 +19,8 @@ struct ExpandedSessionView: View {
       SessionInfoBar(
         session: session,
         onBack: { appState.selectedSessionId = nil },
-        showMetadata: $showMetadata
+        showMetadata: $showMetadata,
+        interactionEnabled: $interactionEnabled
       )
 
       Divider()
@@ -55,12 +58,18 @@ struct ExpandedSessionView: View {
         }
       } else if let nsImage = session.screenshotImage {
         ZStack(alignment: .topTrailing) {
-          Image(nsImage: nsImage)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-            .padding(20)
+          InteractiveScreenshotSurface(
+            image: nsImage,
+            interactionEnabled: interactionEnabled,
+            onClick: dispatchClick,
+            onScroll: dispatchScroll
+          )
+          .padding(20)
+
+          if interactionEnabled {
+            interactionBadge
+              .padding(28)
+          }
 
           if consecutiveFailures >= failureWarningThreshold {
             connectionWarning
@@ -102,6 +111,50 @@ struct ExpandedSessionView: View {
       .clipShape(Capsule())
   }
 
+  private var interactionBadge: some View {
+    Label("Interaction on", systemImage: "cursorarrow.click")
+      .font(.caption)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 4)
+      .background(.green.opacity(0.15))
+      .foregroundStyle(.green)
+      .clipShape(Capsule())
+  }
+
+  private func dispatchClick(_ point: CGPoint) {
+    guard interactionEnabled, session.cdpPort > 0 else { return }
+    Task {
+      do {
+        try await currentInputClient().dispatchMouseClick(x: point.x, y: point.y)
+      } catch {
+        logger.warning("Mouse click dispatch failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func dispatchScroll(_ point: CGPoint, deltaX: CGFloat, deltaY: CGFloat) {
+    guard interactionEnabled, session.cdpPort > 0 else { return }
+    Task {
+      do {
+        try await currentInputClient().dispatchMouseWheel(
+          x: point.x,
+          y: point.y,
+          deltaX: Double(deltaX),
+          deltaY: Double(-deltaY)
+        )
+      } catch {
+        logger.warning("Mouse wheel dispatch failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func currentInputClient() -> CDPClient {
+    if let inputClient { return inputClient }
+    let client = CDPClient(port: session.cdpPort)
+    inputClient = client
+    return client
+  }
+
   // MARK: - Fast Refresh
 
   /// Polls CDP for a fresh screenshot every 1.5s while this session is displayed.
@@ -110,6 +163,7 @@ struct ExpandedSessionView: View {
   private func fastRefreshLoop() async {
     guard session.cdpPort > 0 else { return }
     let client = CDPClient(port: session.cdpPort)
+    inputClient = client
 
     while !Task.isCancelled {
       guard session.status != .closed else { break }
