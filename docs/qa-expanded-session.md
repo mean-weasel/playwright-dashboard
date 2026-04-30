@@ -3,6 +3,9 @@
 ## Prerequisites
 
 - macOS with Accessibility permission granted for Terminal or the shell runner.
+- Accessibility permission granted for the Node.js binary that runs this script
+  when macOS prompts for it. The harness prints the exact `process.execPath`
+  to add under System Settings > Privacy & Security > Accessibility.
 - Google Chrome installed at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, or set `CHROME_PATH`.
 - A packaged app bundle built with `make validate-package`.
 
