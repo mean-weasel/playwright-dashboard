@@ -476,6 +476,8 @@ struct CDPClientTests {
 
   private final class HangingHTTPServer: @unchecked Sendable {
     private let socketFD: Int32
+    private let stopLock = NSLock()
+    private var isStopped = false
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
@@ -526,6 +528,14 @@ struct CDPClientTests {
     }
 
     func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
       shutdown(socketFD, SHUT_RDWR)
       close(socketFD)
     }
@@ -538,6 +548,8 @@ struct CDPClientTests {
   private final class FixedHTTPServer: @unchecked Sendable {
     private let socketFD: Int32
     private let response: String
+    private let stopLock = NSLock()
+    private var isStopped = false
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
@@ -594,6 +606,14 @@ struct CDPClientTests {
     }
 
     func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
       shutdown(socketFD, SHUT_RDWR)
       close(socketFD)
     }
@@ -619,6 +639,8 @@ struct CDPClientTests {
     private let socketFD: Int32
     private let eventsBeforeResponse: Int
     private let screenshotData: Data
+    private let stopLock = NSLock()
+    private var isStopped = false
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
@@ -700,6 +722,14 @@ struct CDPClientTests {
     }
 
     func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
       shutdown(socketFD, SHUT_RDWR)
       close(socketFD)
     }
@@ -813,7 +843,9 @@ struct CDPClientTests {
     private let errorOnCommandIndex: Int?
     private let errorMessage: String
     private let lock = NSLock()
+    private let stopLock = NSLock()
     private var commands: [String] = []
+    private var isStopped = false
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
@@ -903,6 +935,14 @@ struct CDPClientTests {
     }
 
     func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
       shutdown(socketFD, SHUT_RDWR)
       close(socketFD)
     }
@@ -939,7 +979,9 @@ struct CDPClientTests {
     private let expectedInputCommandCount: Int
     private let startErrorMessage: String?
     private let lock = NSLock()
+    private let stopLock = NSLock()
     private var commands: [String] = []
+    private var isStopped = false
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
@@ -1044,6 +1086,14 @@ struct CDPClientTests {
     }
 
     func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
       shutdown(socketFD, SHUT_RDWR)
       close(socketFD)
     }

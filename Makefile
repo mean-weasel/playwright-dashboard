@@ -12,6 +12,7 @@ DIST_DIR := dist
 PACKAGE_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 VISUAL_SNAPSHOT_BASELINE_DIR ?= $(DIST_DIR)/visual-snapshots-baseline
 VISUAL_SNAPSHOT_COMPARE_DIR ?= $(DIST_DIR)/visual-snapshots
+SWIFT_FORMAT ?= $(shell command -v swift-format 2>/dev/null || xcrun --find swift-format 2>/dev/null || echo swift-format)
 
 build:
 	cd $(PKG_DIR) && swift build $(BUILD_CONFIG_FLAG)
@@ -24,10 +25,10 @@ coverage:
 	@echo "Coverage JSON: $$(cd $(PKG_DIR) && swift test --show-codecov-path)"
 
 lint:
-	swift-format lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	$(SWIFT_FORMAT) lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 format:
-	swift-format format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	$(SWIFT_FORMAT) format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 file-size:
 	@OVERSIZED=$$(find $(PKG_DIR)/Sources -name '*.swift' -exec awk 'END { if (NR > 300) print FILENAME ": " NR " lines" }' {} \;); \
