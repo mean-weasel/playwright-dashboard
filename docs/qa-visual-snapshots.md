@@ -4,6 +4,11 @@ The visual snapshot harness captures deterministic dashboard screenshots from th
 
 ## Local
 
+Prerequisite: grant Accessibility permission to the terminal app and the Node.js
+binary that runs the harness. If macOS denies access, the script prints the
+exact `process.execPath` to add under System Settings > Privacy & Security >
+Accessibility.
+
 ```sh
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```

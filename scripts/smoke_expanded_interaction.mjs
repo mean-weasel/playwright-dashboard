@@ -33,6 +33,12 @@ let chromeProcess;
 let appOpened = false;
 let server;
 const events = [];
+const accessibilityHelp = [
+  "macOS denied assistive access for the process running this smoke test.",
+  "Grant Accessibility access to your terminal app and the Node.js binary that runs this harness.",
+  `Node.js binary: ${process.execPath}`,
+  "System Settings > Privacy & Security > Accessibility",
+].join("\n");
 
 try {
   server = await startEventServer(events);
@@ -550,7 +556,11 @@ function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     execFile(command, args, { cwd: repoRoot, ...options }, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(`${command} failed: ${stderr || stdout || error.message}`));
+        const output = stderr || stdout || error.message;
+        const message = isAccessibilityDenied(output)
+          ? `${accessibilityHelp}\n\n${output}`
+          : `${command} failed: ${output}`;
+        reject(new Error(message));
         return;
       }
       resolve(stdout);
@@ -560,6 +570,10 @@ function run(command, args, options = {}) {
 
 function runAppleScript(script) {
   return run("osascript", ["-e", script]);
+}
+
+function isAccessibilityDenied(output) {
+  return output.includes("-25211") || output.includes("not allowed assistive access");
 }
 
 async function waitFor(predicate, label, timeoutMs = 30_000) {
