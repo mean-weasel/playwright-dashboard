@@ -1,4 +1,4 @@
-.PHONY: build test lint file-size mockups package sign-package validate-package smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-snapshot-baseline visual-snapshot-compare install clean qa
 
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
@@ -10,6 +10,9 @@ INSTALL_DIR := $(HOME)/Applications
 APP_BUNDLE := $(INSTALL_DIR)/$(APP_NAME).app
 DIST_DIR := dist
 PACKAGE_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
+VISUAL_SNAPSHOT_BASELINE_DIR ?= $(DIST_DIR)/visual-snapshots-baseline
+VISUAL_SNAPSHOT_COMPARE_DIR ?= $(DIST_DIR)/visual-snapshots
+SWIFT_FORMAT ?= $(shell command -v swift-format 2>/dev/null || xcrun --find swift-format 2>/dev/null || echo swift-format)
 
 build:
 	cd $(PKG_DIR) && swift build $(BUILD_CONFIG_FLAG)
@@ -17,11 +20,15 @@ build:
 test:
 	cd $(PKG_DIR) && swift test
 
+coverage:
+	cd $(PKG_DIR) && swift test --enable-code-coverage
+	@echo "Coverage JSON: $$(cd $(PKG_DIR) && swift test --show-codecov-path)"
+
 lint:
-	swift-format lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	$(SWIFT_FORMAT) lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 format:
-	swift-format format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	$(SWIFT_FORMAT) format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 file-size:
 	@OVERSIZED=$$(find $(PKG_DIR)/Sources -name '*.swift' -exec awk 'END { if (NR > 300) print FILENAME ": " NR " lines" }' {} \;); \
@@ -140,6 +147,25 @@ smoke-expanded-interaction: validate-package
 		exit 2; \
 	fi
 	scripts/smoke_expanded_interaction.mjs
+
+smoke-expanded-fallback: validate-package
+	@if [ "$$RUN_EXPANDED_FALLBACK_SMOKE" != "1" ]; then \
+		echo "Set RUN_EXPANDED_FALLBACK_SMOKE=1 to drive the expanded-session fallback smoke test"; \
+		exit 2; \
+	fi
+	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
+
+visual-snapshots: validate-package
+	scripts/snapshot_visual_states.mjs
+
+visual-snapshot-baseline: validate-package
+	VISUAL_SNAPSHOT_DIR=$(VISUAL_SNAPSHOT_BASELINE_DIR) scripts/snapshot_visual_states.mjs
+
+visual-snapshot-compare: validate-package
+	test -d $(VISUAL_SNAPSHOT_BASELINE_DIR)
+	VISUAL_SNAPSHOT_BASELINE_DIR=$(VISUAL_SNAPSHOT_BASELINE_DIR) \
+		VISUAL_SNAPSHOT_DIR=$(VISUAL_SNAPSHOT_COMPARE_DIR) \
+		scripts/snapshot_visual_states.mjs
 
 install: package
 	mkdir -p $(INSTALL_DIR)

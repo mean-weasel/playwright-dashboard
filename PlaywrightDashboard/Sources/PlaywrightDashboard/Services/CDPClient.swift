@@ -3,11 +3,10 @@ import Foundation
 /// Lightweight CDP (Chrome DevTools Protocol) client using URLSessionWebSocketTask.
 /// Connects to a single page's WebSocket endpoint and sends commands.
 actor CDPClient {
-  private let port: Int
-  private var nextId = 1
-  private let session: URLSession
-  private let maxResponseMessages = 10
-  private let requestTimeout: Duration
+  let port: Int
+  var nextId = 1
+  let session: URLSession
+  let requestTimeout: Duration
 
   init(port: Int, requestTimeout: Duration = .seconds(3)) {
     self.port = port
@@ -17,8 +16,6 @@ actor CDPClient {
     configuration.timeoutIntervalForResource = requestTimeout.timeInterval
     self.session = URLSession(configuration: configuration)
   }
-
-  // MARK: - Page Discovery
 
   struct PageInfo: Decodable {
     let id: String
@@ -31,13 +28,16 @@ actor CDPClient {
   /// Fetches the list of pages from the CDP HTTP endpoint.
   func listPages() async throws -> [PageInfo] {
     let url = URL(string: "http://localhost:\(port)/json/list")!
-    let (data, _) = try await withTimeout(requestTimeout) {
+    let (data, response) = try await withTimeout(requestTimeout) {
       try await self.session.data(from: url)
+    }
+    guard let httpResponse = response as? HTTPURLResponse,
+      (200..<300).contains(httpResponse.statusCode)
+    else {
+      throw CDPError.invalidResponse
     }
     return try JSONDecoder().decode([PageInfo].self, from: data)
   }
-
-  // MARK: - Screenshot
 
   struct ScreenshotResult: Sendable {
     let jpeg: Data
@@ -78,38 +78,22 @@ actor CDPClient {
     }
     try await sendWebSocketMessage(.string(commandString), to: ws)
 
-    // Read response (may need to skip CDP events)
-    for _ in 0..<maxResponseMessages {
-      let message = try await receiveWebSocketMessage(from: ws)
-      switch message {
-      case .string(let text):
-        if let result = try Self.parseScreenshotResponse(text, expectedId: id, page: page) {
-          return result
-        }
-
-      case .data:
-        continue  // Skip binary messages
-
-      @unknown default:
-        continue
-      }
-    }
-
-    throw CDPError.timeout
+    return try await waitForScreenshotResponse(from: ws, id: id, page: page)
   }
 
-  // MARK: - Input
-
   func dispatchMouseClick(x: Double, y: Double) async throws {
-    try await sendCommand(
-      method: "Input.dispatchMouseEvent",
-      params: Self.mouseEventParams(type: "mousePressed", x: x, y: y, button: "left", clickCount: 1)
-    )
-    try await sendCommand(
-      method: "Input.dispatchMouseEvent",
-      params: Self.mouseEventParams(
-        type: "mouseReleased", x: x, y: y, button: "left", clickCount: 1)
-    )
+    try await sendCommands([
+      (
+        method: "Input.dispatchMouseEvent",
+        params: Self.mouseEventParams(
+          type: "mousePressed", x: x, y: y, button: "left", clickCount: 1)
+      ),
+      (
+        method: "Input.dispatchMouseEvent",
+        params: Self.mouseEventParams(
+          type: "mouseReleased", x: x, y: y, button: "left", clickCount: 1)
+      ),
+    ])
   }
 
   func dispatchMouseWheel(x: Double, y: Double, deltaX: Double, deltaY: Double) async throws {
@@ -117,6 +101,20 @@ actor CDPClient {
       method: "Input.dispatchMouseEvent",
       params: Self.mouseWheelParams(x: x, y: y, deltaX: deltaX, deltaY: deltaY)
     )
+  }
+
+  func dispatchKeyPress(_ input: KeyEventInput) async throws {
+    let downType = input.isPrintable ? "keyDown" : "rawKeyDown"
+    try await sendCommands([
+      (
+        method: "Input.dispatchKeyEvent",
+        params: Self.keyEventParams(type: downType, input: input, includeText: input.isPrintable)
+      ),
+      (
+        method: "Input.dispatchKeyEvent",
+        params: Self.keyEventParams(type: "keyUp", input: input, includeText: false)
+      ),
+    ])
   }
 
   // MARK: - Errors
@@ -166,6 +164,10 @@ actor CDPClient {
   }
 
   private func sendCommand(method: String, params: [String: Any]) async throws {
+    try await sendCommands([(method: method, params: params)])
+  }
+
+  private func sendCommands(_ commands: [(method: String, params: [String: Any])]) async throws {
     let pages = try await listPages()
     guard
       let page = Self.pageForScreenshot(from: pages),
@@ -179,22 +181,59 @@ actor CDPClient {
     ws.resume()
     defer { ws.cancel(with: .normalClosure, reason: nil) }
 
-    let id = nextId
-    nextId += 1
-    let commandString = try Self.commandString(id: id, method: method, params: params)
-    try await sendWebSocketMessage(.string(commandString), to: ws)
-
-    for _ in 0..<maxResponseMessages {
-      let message = try await receiveWebSocketMessage(from: ws)
-      if case .string(let text) = message, try Self.isCommandResponse(text, expectedId: id) {
-        return
-      }
+    for command in commands {
+      let id = nextId
+      nextId += 1
+      let commandString = try Self.commandString(
+        id: id, method: command.method, params: command.params)
+      try await sendWebSocketMessage(.string(commandString), to: ws)
+      try await waitForCommandResponse(from: ws, id: id)
     }
-
-    throw CDPError.timeout
   }
 
-  private func withTimeout<T: Sendable>(
+  private func waitForScreenshotResponse(
+    from webSocket: URLSessionWebSocketTask,
+    id: Int,
+    page: PageInfo
+  ) async throws -> ScreenshotResult {
+    try await withTimeout(requestTimeout) {
+      while !Task.isCancelled {
+        let message = try await self.receiveWebSocketMessage(from: webSocket)
+        switch message {
+        case .string(let text):
+          if let result = try Self.parseScreenshotResponse(text, expectedId: id, page: page) {
+            return result
+          }
+
+        case .data:
+          continue  // Skip binary messages
+
+        @unknown default:
+          continue
+        }
+      }
+
+      throw CDPError.timeout
+    }
+  }
+
+  private func waitForCommandResponse(
+    from webSocket: URLSessionWebSocketTask,
+    id: Int
+  ) async throws {
+    try await withTimeout(requestTimeout) {
+      while !Task.isCancelled {
+        let message = try await self.receiveWebSocketMessage(from: webSocket)
+        if case .string(let text) = message, try Self.isCommandResponse(text, expectedId: id) {
+          return
+        }
+      }
+
+      throw CDPError.timeout
+    }
+  }
+
+  func withTimeout<T: Sendable>(
     _ timeout: Duration,
     operation: @escaping @Sendable () async throws -> T
   ) async throws -> T {
@@ -215,7 +254,7 @@ actor CDPClient {
     }
   }
 
-  private func sendWebSocketMessage(
+  func sendWebSocketMessage(
     _ message: URLSessionWebSocketTask.Message,
     to webSocket: URLSessionWebSocketTask
   ) async throws {
@@ -234,7 +273,7 @@ actor CDPClient {
     }
   }
 
-  private func receiveWebSocketMessage(
+  func receiveWebSocketMessage(
     from webSocket: URLSessionWebSocketTask
   ) async throws -> URLSessionWebSocketTask.Message {
     try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in

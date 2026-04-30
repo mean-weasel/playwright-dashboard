@@ -52,7 +52,10 @@ final class ScreenshotService {
     // (its dedicated fast-refresh loop handles captures to avoid dual-writer conflicts)
     let targets: [(sessionId: String, port: Int)] =
       sessions
-      .filter { $0.cdpPort > 0 && $0.status != .closed && $0.sessionId != selectedSessionId }
+      .filter {
+        $0.cdpPort > 0 && $0.status != .closed && $0.status != .closing
+          && $0.sessionId != selectedSessionId
+      }
       .map { ($0.sessionId, $0.cdpPort) }
 
     // Capture screenshots concurrently off the main actor
@@ -93,18 +96,12 @@ final class ScreenshotService {
 
       if let result {
         session.updateFromScreenshot(result)
+        markStaleIfNeeded(session)
         didUpdateSession = true
       } else {
         // CDP connection failed — mark stale if inactive long enough
-        let threshold = staleThreshold
-        if threshold > 0 {
-          let staleCutoff = Date().addingTimeInterval(-threshold)
-          if (session.status == .active || session.status == .idle)
-            && session.lastActivityAt < staleCutoff
-          {
-            session.status = .stale
-            didUpdateSession = true
-          }
+        if markStaleIfNeeded(session) {
+          didUpdateSession = true
         }
       }
     }
@@ -121,5 +118,10 @@ final class ScreenshotService {
     let client = CDPClient(port: port)
     clients[port] = client
     return client
+  }
+
+  @discardableResult
+  private func markStaleIfNeeded(_ session: SessionRecord) -> Bool {
+    session.markStaleIfInactive(threshold: staleThreshold)
   }
 }

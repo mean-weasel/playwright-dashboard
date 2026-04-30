@@ -60,6 +60,18 @@ struct SessionInfoBar: View {
           .frame(maxWidth: 300)
       }
 
+      if let error = appState.lastScreenshotSaveError {
+        warningLabel("Save failed", message: error) {
+          appState.dismissScreenshotSaveError()
+        }
+      }
+
+      if let error = appState.lastOpenURLError {
+        warningLabel("Open failed", message: error) {
+          appState.dismissOpenURLError()
+        }
+      }
+
       Button {
         _ = appState.saveScreenshot(session)
       } label: {
@@ -68,6 +80,8 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(session.lastScreenshot == nil)
+      .accessibilityLabel("Save screenshot")
+      .accessibilityIdentifier("expanded-save-screenshot")
       .help("Save screenshot")
 
       Button {
@@ -78,6 +92,8 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(session.lastURL == nil || session.lastURL == "about:blank")
+      .accessibilityLabel("Open current URL")
+      .accessibilityIdentifier("expanded-open-current-url")
       .help("Open current URL")
 
       Button {
@@ -88,6 +104,8 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(session.cdpPort <= 0)
+      .accessibilityLabel("Open CDP inspector")
+      .accessibilityIdentifier("expanded-open-cdp-inspector")
       .help("Open CDP inspector")
 
       Button {
@@ -98,9 +116,14 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
-      .accessibilityLabel(interactionEnabled ? "Disable interaction" : "Enable interaction")
+      .accessibilityLabel(
+        interactionEnabled ? "Disable screenshot interaction" : "Enable screenshot interaction"
+      )
       .accessibilityIdentifier("expanded-interaction-toggle")
-      .help(interactionEnabled ? "Disable interaction" : "Enable interaction")
+      .help(
+        interactionEnabled
+          ? "Disable click, scroll, and keyboard forwarding"
+          : "Enable click, scroll, and keyboard forwarding from the refreshed screenshot")
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -111,6 +134,8 @@ struct SessionInfoBar: View {
           .font(.body)
       }
       .buttonStyle(.plain)
+      .accessibilityLabel(showMetadata ? "Hide metadata" : "Show metadata")
+      .accessibilityIdentifier("expanded-metadata-toggle")
       .help(showMetadata ? "Hide metadata" : "Show metadata")
     }
     .padding(.horizontal, 16)
@@ -121,5 +146,24 @@ struct SessionInfoBar: View {
   private func commitRename() {
     appState.rename(session, to: editText)
     isEditing = false
+  }
+
+  private func warningLabel(
+    _ title: String,
+    message: String,
+    onDismiss: @escaping () -> Void
+  ) -> some View {
+    HStack(spacing: 4) {
+      Label(title, systemImage: "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(.orange)
+        .help(message)
+      Button(action: onDismiss) {
+        Image(systemName: "xmark.circle.fill")
+          .font(.caption)
+      }
+      .buttonStyle(.plain)
+      .help("Dismiss")
+    }
   }
 }

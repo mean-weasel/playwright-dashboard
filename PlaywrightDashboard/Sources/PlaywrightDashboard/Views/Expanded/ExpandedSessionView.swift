@@ -9,9 +9,13 @@ struct ExpandedSessionView: View {
   @AppStorage("expandedShowMetadata") private var showMetadata = true
   @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
   @State private var consecutiveFailures = 0
-  @State private var inputClient: CDPClient?
+  @State private var pageConnection: CDPPageConnection?
+  @State private var fallbackInputClient: CDPClient?
+  @State private var isScreencasting = false
+  @State private var isSnapshotFallback = false
+  @State private var frameCountSinceSave = 0
 
-  /// Show a warning after this many consecutive CDP failures (~7.5 seconds).
+  /// Show a warning after this many consecutive CDP failures.
   private let failureWarningThreshold = 5
 
   var body: some View {
@@ -36,7 +40,7 @@ struct ExpandedSessionView: View {
       .animation(.easeInOut(duration: 0.2), value: showMetadata)
     }
     .task(id: session.sessionId) {
-      await fastRefreshLoop()
+      await streamOrFallbackLoop()
     }
   }
 
@@ -62,18 +66,27 @@ struct ExpandedSessionView: View {
             image: nsImage,
             interactionEnabled: interactionEnabled,
             onClick: dispatchClick,
-            onScroll: dispatchScroll
+            onScroll: dispatchScroll,
+            onKeyPress: dispatchKeyPress
           )
           .padding(20)
 
+          ExpandedRefreshBadge(
+            isScreencasting: isScreencasting,
+            isSnapshotFallback: isSnapshotFallback
+          )
+          .padding(28)
+
           if interactionEnabled {
-            interactionBadge
-              .padding(28)
+            ExpandedInteractionBadge()
+              .padding(.top, 58)
+              .padding(.trailing, 28)
           }
 
           if consecutiveFailures >= failureWarningThreshold {
-            connectionWarning
-              .padding(28)
+            ExpandedConnectionWarningBadge()
+              .padding(.top, interactionEnabled ? 88 : 58)
+              .padding(.trailing, 28)
           }
         }
       } else if consecutiveFailures >= failureWarningThreshold {
@@ -91,7 +104,7 @@ struct ExpandedSessionView: View {
         VStack(spacing: 12) {
           ProgressView()
             .controlSize(.large)
-          Text("Connecting to browser...")
+          Text("Loading browser snapshot...")
             .font(.subheadline)
             .foregroundStyle(.secondary)
         }
@@ -101,31 +114,15 @@ struct ExpandedSessionView: View {
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
-  private var connectionWarning: some View {
-    Label("Connection lost", systemImage: "exclamationmark.triangle.fill")
-      .font(.caption)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 4)
-      .background(.orange.opacity(0.15))
-      .foregroundStyle(.orange)
-      .clipShape(Capsule())
-  }
-
-  private var interactionBadge: some View {
-    Label("Interaction on", systemImage: "cursorarrow.click")
-      .font(.caption)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 4)
-      .background(.green.opacity(0.15))
-      .foregroundStyle(.green)
-      .clipShape(Capsule())
-  }
-
   private func dispatchClick(_ point: CGPoint) {
     guard interactionEnabled, session.cdpPort > 0 else { return }
     Task {
       do {
-        try await currentInputClient().dispatchMouseClick(x: point.x, y: point.y)
+        if let pageConnection {
+          try await pageConnection.dispatchMouseClick(x: point.x, y: point.y)
+        } else {
+          try await currentFallbackInputClient().dispatchMouseClick(x: point.x, y: point.y)
+        }
       } catch {
         logger.warning("Mouse click dispatch failed: \(error.localizedDescription)")
       }
@@ -136,34 +133,120 @@ struct ExpandedSessionView: View {
     guard interactionEnabled, session.cdpPort > 0 else { return }
     Task {
       do {
-        try await currentInputClient().dispatchMouseWheel(
-          x: point.x,
-          y: point.y,
-          deltaX: Double(deltaX),
-          deltaY: Double(-deltaY)
-        )
+        if let pageConnection {
+          try await pageConnection.dispatchMouseWheel(
+            x: point.x,
+            y: point.y,
+            deltaX: Double(deltaX),
+            deltaY: Double(-deltaY)
+          )
+        } else {
+          try await currentFallbackInputClient().dispatchMouseWheel(
+            x: point.x,
+            y: point.y,
+            deltaX: Double(deltaX),
+            deltaY: Double(-deltaY)
+          )
+        }
       } catch {
         logger.warning("Mouse wheel dispatch failed: \(error.localizedDescription)")
       }
     }
   }
 
-  private func currentInputClient() -> CDPClient {
-    if let inputClient { return inputClient }
+  private func dispatchKeyPress(_ input: CDPClient.KeyEventInput) {
+    guard interactionEnabled, session.cdpPort > 0 else { return }
+    Task {
+      do {
+        if let pageConnection {
+          try await pageConnection.dispatchKeyPress(input)
+        } else {
+          try await currentFallbackInputClient().dispatchKeyPress(input)
+        }
+      } catch {
+        logger.warning("Key dispatch failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func currentFallbackInputClient() -> CDPClient {
+    if let fallbackInputClient { return fallbackInputClient }
     let client = CDPClient(port: session.cdpPort)
-    inputClient = client
+    fallbackInputClient = client
     return client
   }
 
-  // MARK: - Fast Refresh
+  // MARK: - Refresh
 
-  /// Polls CDP for a fresh screenshot every 1.5s while this session is displayed.
-  /// The `.task(id: session.sessionId)` modifier cancels and restarts this loop
-  /// when the user switches to a different session.
-  private func fastRefreshLoop() async {
+  private func streamOrFallbackLoop() async {
     guard session.cdpPort > 0 else { return }
-    let client = CDPClient(port: session.cdpPort)
-    inputClient = client
+    let connection = CDPPageConnection(port: session.cdpPort)
+    pageConnection = connection
+    fallbackInputClient = nil
+    isScreencasting = false
+    isSnapshotFallback = false
+    frameCountSinceSave = 0
+
+    if DashboardSettings.forceExpandedSnapshotFallback() {
+      isSnapshotFallback = true
+      await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
+      return
+    }
+
+    do {
+      let frames = try await connection.startScreencast(
+        quality: DashboardSettings.expandedQuality())
+      for try await frame in frames {
+        guard !Task.isCancelled, session.status != .closed else { break }
+        applyScreencastFrame(frame)
+      }
+      await connection.close()
+      pageConnection = nil
+    } catch is CancellationError {
+      await connection.close()
+      pageConnection = nil
+      return
+    } catch {
+      await connection.close()
+      pageConnection = nil
+      isScreencasting = false
+      isSnapshotFallback = true
+      consecutiveFailures += 1
+      logger.warning(
+        "Screencast failed on port \(session.cdpPort): \(error.localizedDescription). Falling back to screenshot polling."
+      )
+      await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
+    }
+  }
+
+  private func applyScreencastFrame(_ frame: CDPClient.ScreencastFrame) {
+    let result = CDPClient.ScreenshotResult(
+      jpeg: frame.jpeg,
+      url: frame.url,
+      title: frame.title
+    )
+    session.updateFromScreenshot(result)
+    isScreencasting = true
+    isSnapshotFallback = false
+    consecutiveFailures = 0
+    frameCountSinceSave += 1
+
+    // Persist occasional frames so Save Screenshot and session history have recent data
+    // without writing SwiftData on every screencast frame.
+    if frameCountSinceSave >= 30 {
+      frameCountSinceSave = 0
+      appState.saveSessionChanges()
+    }
+  }
+
+  /// Polls CDP for screenshots when Page.startScreencast is unavailable.
+  private func fastRefreshLoop() async {
+    await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
+  }
+
+  private func fastRefreshLoop(client: CDPClient) async {
+    guard session.cdpPort > 0 else { return }
+    fallbackInputClient = client
 
     while !Task.isCancelled {
       guard session.status != .closed else { break }

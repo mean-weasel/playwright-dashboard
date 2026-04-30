@@ -64,7 +64,7 @@ struct SettingsView: View {
         }
       }
 
-      Picker("Refresh expanded view every", selection: $expandedRefreshMilliseconds) {
+      Picker("Refresh expanded snapshot every", selection: $expandedRefreshMilliseconds) {
         ForEach(expandedRefreshOptions, id: \.milliseconds) { option in
           Text(option.label).tag(option.milliseconds)
         }
@@ -91,6 +91,16 @@ struct SettingsView: View {
           )
           .foregroundStyle(appState.playwrightCLIStatus.isAvailable ? .green : .orange)
           Text(appState.playwrightCLIStatus.displayText)
+        }
+      }
+
+      if appState.isPersistenceDegraded {
+        LabeledContent("Storage") {
+          HStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+              .foregroundStyle(.orange)
+            Text("Temporary only")
+          }
         }
       }
 
@@ -121,6 +131,7 @@ struct SettingsView: View {
     }
     .formStyle(.grouped)
     .frame(width: 350)
+    .accessibilityIdentifier("settings-view")
     .onAppear {
       // Sync toggle with actual plist state on disk
       launchAtLogin = LaunchAtLoginManager.isEnabled

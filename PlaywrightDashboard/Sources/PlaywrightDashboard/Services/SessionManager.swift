@@ -26,6 +26,7 @@ final class SessionManager {
         return $0.createdAt < $1.createdAt
       }
   }
+  private(set) var sessionFileErrors: [String: String] = [:]
 
   // MARK: - Private state
 
@@ -64,6 +65,7 @@ final class SessionManager {
   /// Reconciles the on-disk list with the SwiftData store.
   func syncWithWatcher() {
     let fileURLs = sessionFileProvider()
+    sessionFileErrors.removeAll()
 
     // Parse all files and collect the canonical session IDs from JSON
     var liveConfigs: [SessionFileConfig] = []
@@ -81,7 +83,9 @@ final class SessionManager {
 
     // 2. Mark disappeared sessions as closed (auto-close, not user-initiated)
     for record in allRecords where !record.sessionId.isEmpty {
-      if record.status != .closed && !liveIds.contains(record.sessionId) {
+      if record.status != .closed && record.status != .closing
+        && !liveIds.contains(record.sessionId)
+      {
         record.close(byUser: false)
       }
     }
@@ -119,6 +123,7 @@ final class SessionManager {
     } catch {
       logger.debug(
         "Cannot read session file \(url.lastPathComponent): \(error.localizedDescription)")
+      sessionFileErrors[url.lastPathComponent] = error.localizedDescription
       return nil
     }
     do {
@@ -126,6 +131,7 @@ final class SessionManager {
     } catch {
       logger.warning(
         "Cannot parse session file \(url.lastPathComponent): \(error.localizedDescription)")
+      sessionFileErrors[url.lastPathComponent] = error.localizedDescription
       return nil
     }
   }

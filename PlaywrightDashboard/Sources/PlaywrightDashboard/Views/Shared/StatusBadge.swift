@@ -5,7 +5,7 @@ struct StatusBadge: View {
   let status: SessionStatus
 
   var body: some View {
-    Text(status.rawValue.capitalized)
+    Text(status.displayText)
       .font(.caption2)
       .padding(.horizontal, 6)
       .padding(.vertical, 2)
@@ -19,6 +19,8 @@ struct StatusBadge: View {
     case .active: .green
     case .idle: .orange
     case .stale: .yellow
+    case .closing: .blue
+    case .closeFailed: .red
     case .closed: .secondary
     }
   }

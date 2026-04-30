@@ -1,0 +1,62 @@
+name: GUI Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Smoke mode to run
+        type: choice
+        required: true
+        default: live
+        options:
+          - live
+          - fallback
+
+concurrency:
+  group: gui-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  expanded-interaction:
+    name: Expanded Interaction Smoke
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for the GUI smoke workflow."
+            exit 1
+          fi
+
+      - name: Run expanded interaction smoke
+        env:
+          RUN_EXPANDED_INTERACTION_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
+        if: inputs.mode == 'live'
+        run: make smoke-expanded-interaction
+
+      - name: Run expanded fallback smoke
+        env:
+          RUN_EXPANDED_FALLBACK_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
+        if: inputs.mode == 'fallback'
+        run: make smoke-expanded-fallback
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke-artifacts
+          path: |
+            dist/gui-smoke-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore

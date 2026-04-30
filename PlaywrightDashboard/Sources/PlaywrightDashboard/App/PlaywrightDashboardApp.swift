@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 @MainActor private var smokeDashboardWindow: NSWindow?
+@MainActor private var smokeSettingsWindow: NSWindow?
 
 @main
 struct PlaywrightDashboardApp: App {
@@ -17,19 +18,41 @@ struct PlaywrightDashboardApp: App {
   init() {
     UserDefaults.standard.register(defaults: DashboardSettings.registrationDefaults())
 
-    let container = ModelContainerFactory.make()
-    let state = AppState()
+    let smokeArguments = SmokeLaunchArguments(arguments: CommandLine.arguments)
+    let creation =
+      smokeArguments.usesInMemoryStore
+      ? ModelContainerFactory.makeInMemory()
+      : ModelContainerFactory.makeWithDiagnostics()
+    let container = creation.container
+    let state: AppState
+    if let daemonDirectory = smokeArguments.daemonDirectory {
+      state = AppState(
+        daemonDirectory: daemonDirectory,
+        shouldStartScreenshots: !smokeArguments.disablesScreenshots)
+    } else {
+      state = AppState()
+    }
+    state.setPersistenceDegraded(creation.usedFallback)
     state.startSync(modelContext: container.mainContext)
-    let arguments = CommandLine.arguments
-    if let sessionId = Self.smokeSelectedSessionId(arguments: arguments) {
+    UserDefaults.standard.set(
+      smokeArguments.forcesSnapshotFallback,
+      forKey: DashboardSettings.forceExpandedSnapshotFallbackKey
+    )
+    if let sessionId = smokeArguments.selectedSessionId {
       state.selectedSessionId = sessionId
     }
 
     self.modelContainer = container
     self._appState = State(initialValue: state)
 
-    if arguments.contains("--smoke-open-dashboard") {
-      Self.openSmokeDashboardWindow(appState: state, modelContainer: container)
+    if smokeArguments.opensDashboard {
+      Self.openSmokeDashboardWindow(
+        appState: state,
+        modelContainer: container,
+        initialFilter: smokeArguments.dashboardFilter)
+    }
+    if smokeArguments.opensSettings {
+      Self.openSmokeSettingsWindow(appState: state)
     }
   }
 
@@ -73,26 +96,18 @@ extension PlaywrightDashboardApp {
       }
   }
 
-  private static func smokeSelectedSessionId(arguments: [String]) -> String? {
-    guard let index = arguments.firstIndex(of: "--smoke-session-id"),
-      arguments.indices.contains(index + 1)
-    else {
-      return nil
-    }
-    return arguments[index + 1]
-  }
-
   @MainActor
   private static func openSmokeDashboardWindow(
     appState: AppState,
-    modelContainer: ModelContainer
+    modelContainer: ModelContainer,
+    initialFilter: SidebarFilter?
   ) {
     DispatchQueue.main.async {
       NSApplication.shared.setActivationPolicy(.regular)
       NSApplication.shared.activate(ignoringOtherApps: true)
       appState.isDashboardOpen = true
 
-      let rootView = DashboardWindow()
+      let rootView = DashboardWindow(initialFilter: initialFilter)
         .environment(appState)
         .modelContainer(modelContainer)
 
@@ -107,6 +122,29 @@ extension PlaywrightDashboardApp {
       window.contentView = NSHostingView(rootView: rootView)
       window.makeKeyAndOrderFront(nil)
       smokeDashboardWindow = window
+    }
+  }
+
+  @MainActor
+  private static func openSmokeSettingsWindow(appState: AppState) {
+    DispatchQueue.main.async {
+      NSApplication.shared.setActivationPolicy(.regular)
+      NSApplication.shared.activate(ignoringOtherApps: true)
+
+      let rootView = SettingsView()
+        .environment(appState)
+
+      let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 430, height: 520),
+        styleMask: [.titled, .closable],
+        backing: .buffered,
+        defer: false
+      )
+      window.title = "Settings"
+      window.center()
+      window.contentView = NSHostingView(rootView: rootView)
+      window.makeKeyAndOrderFront(nil)
+      smokeSettingsWindow = window
     }
   }
 }

@@ -92,4 +92,150 @@ struct ScreenshotUpdateTests {
     #expect(session.lastURL == nil)
     #expect(session.lastTitle == nil)
   }
+
+  @Test("unchanged screenshot metadata does not refresh activity")
+  func unchangedScreenshotDoesNotRefreshActivity() {
+    let oldActivity = Date().addingTimeInterval(-600)
+    let session = SessionRecord(
+      sessionId: "idle-session",
+      autoLabel: "Idle",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      status: .active,
+      lastURL: "http://localhost:3000",
+      lastTitle: "App",
+      lastActivityAt: oldActivity
+    )
+    let result = CDPClient.ScreenshotResult(
+      jpeg: Data([0x01, 0x02]),
+      url: "http://localhost:3000",
+      title: "App"
+    )
+
+    session.updateFromScreenshot(result)
+
+    #expect(session.lastActivityAt == oldActivity)
+    #expect(session.lastScreenshot == Data([0x01, 0x02]))
+    #expect(session.status == .active)
+  }
+
+  @Test("changed screenshot metadata refreshes activity")
+  func changedScreenshotRefreshesActivity() {
+    let oldActivity = Date().addingTimeInterval(-600)
+    let session = SessionRecord(
+      sessionId: "active-session",
+      autoLabel: "Active",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      status: .idle,
+      lastURL: "about:blank",
+      lastTitle: "",
+      lastActivityAt: oldActivity
+    )
+    let result = CDPClient.ScreenshotResult(
+      jpeg: Data([0x01, 0x02]),
+      url: "http://localhost:3000",
+      title: "App"
+    )
+
+    session.updateFromScreenshot(result)
+
+    #expect(session.lastActivityAt > oldActivity)
+    #expect(session.status == .active)
+  }
+}
+
+@Suite("SessionRecord.markStaleIfInactive")
+struct MarkStaleIfInactiveTests {
+
+  @Test("active session older than threshold becomes stale")
+  func oldActiveSessionBecomesStale() {
+    let now = Date()
+    let session = makeSession(
+      status: .active,
+      lastActivityAt: now.addingTimeInterval(-301)
+    )
+
+    let didMarkStale = session.markStaleIfInactive(threshold: 300, now: now)
+
+    #expect(didMarkStale)
+    #expect(session.status == .stale)
+  }
+
+  @Test("idle session older than threshold becomes stale")
+  func oldIdleSessionBecomesStale() {
+    let now = Date()
+    let session = makeSession(
+      status: .idle,
+      lastActivityAt: now.addingTimeInterval(-301)
+    )
+
+    let didMarkStale = session.markStaleIfInactive(threshold: 300, now: now)
+
+    #expect(didMarkStale)
+    #expect(session.status == .stale)
+  }
+
+  @Test("recent activity remains current")
+  func recentActivityDoesNotBecomeStale() {
+    let now = Date()
+    let session = makeSession(
+      status: .active,
+      lastActivityAt: now.addingTimeInterval(-299)
+    )
+
+    let didMarkStale = session.markStaleIfInactive(threshold: 300, now: now)
+
+    #expect(!didMarkStale)
+    #expect(session.status == .active)
+  }
+
+  @Test("disabled threshold leaves session unchanged")
+  func disabledThresholdDoesNotMarkStale() {
+    let now = Date()
+    let session = makeSession(
+      status: .active,
+      lastActivityAt: now.addingTimeInterval(-3_600)
+    )
+
+    let didMarkStale = session.markStaleIfInactive(threshold: 0, now: now)
+
+    #expect(!didMarkStale)
+    #expect(session.status == .active)
+  }
+
+  @Test("terminal and pending-close statuses are not overwritten")
+  func protectedStatusesDoNotBecomeStale() {
+    let now = Date()
+    let statuses: [SessionStatus] = [.stale, .closing, .closeFailed, .closed]
+
+    for status in statuses {
+      let session = makeSession(
+        status: status,
+        lastActivityAt: now.addingTimeInterval(-3_600)
+      )
+
+      let didMarkStale = session.markStaleIfInactive(threshold: 300, now: now)
+
+      #expect(!didMarkStale)
+      #expect(session.status == status)
+    }
+  }
+
+  private func makeSession(
+    status: SessionStatus,
+    lastActivityAt: Date
+  ) -> SessionRecord {
+    SessionRecord(
+      sessionId: UUID().uuidString,
+      autoLabel: "Session",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      status: status,
+      lastActivityAt: lastActivityAt
+    )
+  }
 }

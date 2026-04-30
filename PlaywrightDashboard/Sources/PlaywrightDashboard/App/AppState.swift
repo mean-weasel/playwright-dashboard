@@ -10,10 +10,13 @@ final class AppState {
   var isDashboardOpen: Bool = false
   var selectedSessionId: String?
   private(set) var sessionTerminationErrors: [String: String] = [:]
-  private(set) var lastSavedScreenshotURL: URL?
+  private(set) var sessionFileErrors: [String: String] = [:]
+  var lastSavedScreenshotURL: URL?
+  var lastScreenshotSaveError: String?
+  var lastOpenURLError: String?
+  private(set) var lastPersistenceSaveError: String?
   private(set) var playwrightCLIStatus: PlaywrightCLIStatus = .unknown
-
-  // Services
+  private(set) var isPersistenceDegraded = false
   private let sessionFileProvider: @MainActor () -> [URL]
   private let startWatching: @MainActor () -> Void
   private let stopWatching: @MainActor () -> Void
@@ -21,7 +24,9 @@ final class AppState {
   private let syncInterval: Duration
   private let sessionTerminator: SessionTerminator
   private let cliStatusProvider: PlaywrightCLIStatusProvider
-  private let screenshotDirectoryProvider: @MainActor () -> URL
+  let screenshotDirectoryProvider: @MainActor () -> URL
+  let urlOpener: @MainActor (URL) -> Bool
+  private let modelContextSaver: @MainActor (ModelContext?) throws -> Void
   private var sessionManager: SessionManager?
   private let screenshotService = ScreenshotService()
   private var syncTask: Task<Void, Never>?
@@ -37,8 +42,22 @@ final class AppState {
     self.sessionTerminator = SessionTerminator()
     self.cliStatusProvider = PlaywrightCLIStatusProvider()
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
+    self.urlOpener = { NSWorkspace.shared.open($0) }
+    self.modelContextSaver = Self.defaultModelContextSaver
   }
-
+  init(daemonDirectory: URL, shouldStartScreenshots: Bool = true) {
+    let watcher = DaemonWatcher(daemonDirectory: daemonDirectory)
+    self.sessionFileProvider = { watcher.sessionFiles }
+    self.startWatching = { watcher.start() }
+    self.stopWatching = { watcher.stop() }
+    self.shouldStartScreenshots = shouldStartScreenshots
+    self.syncInterval = .seconds(2)
+    self.sessionTerminator = SessionTerminator()
+    self.cliStatusProvider = PlaywrightCLIStatusProvider()
+    self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
+    self.urlOpener = { NSWorkspace.shared.open($0) }
+    self.modelContextSaver = Self.defaultModelContextSaver
+  }
   init(
     sessionFileProvider: @escaping @MainActor () -> [URL],
     startWatching: @escaping @MainActor () -> Void = {},
@@ -48,7 +67,10 @@ final class AppState {
     sessionTerminator: SessionTerminator = SessionTerminator(),
     cliStatusProvider: PlaywrightCLIStatusProvider = PlaywrightCLIStatusProvider(),
     screenshotDirectoryProvider: @escaping @MainActor () -> URL =
-      AppState.defaultScreenshotDirectory
+      AppState.defaultScreenshotDirectory,
+    urlOpener: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
+    modelContextSaver: @escaping @MainActor (ModelContext?) throws -> Void =
+      AppState.defaultModelContextSaver
   ) {
     self.sessionFileProvider = sessionFileProvider
     self.startWatching = startWatching
@@ -58,6 +80,8 @@ final class AppState {
     self.sessionTerminator = sessionTerminator
     self.cliStatusProvider = cliStatusProvider
     self.screenshotDirectoryProvider = screenshotDirectoryProvider
+    self.urlOpener = urlOpener
+    self.modelContextSaver = modelContextSaver
   }
 
   /// Call once from a view that has access to the ModelContext.
@@ -114,13 +138,14 @@ final class AppState {
   }
 
   func closeAndTerminate(_ session: SessionRecord) {
-    close(session, byUser: true)
+    beginTerminating(session)
     Task {
       await terminate(session)
     }
   }
 
   func retryTerminate(_ session: SessionRecord) {
+    beginTerminating(session)
     Task {
       await terminate(session)
     }
@@ -155,16 +180,42 @@ final class AppState {
 
   func dismissTerminationError(sessionId: String) {
     sessionTerminationErrors[sessionId] = nil
+    if let session = sessions.first(where: { $0.sessionId == sessionId }),
+      session.status == .closeFailed
+    {
+      session.status = SessionRecord.deriveStatus(from: session.lastURL)
+      saveSessionChanges()
+    }
   }
 
   func dismissAllTerminationErrors() {
+    for session in sessions where session.status == .closeFailed {
+      session.status = SessionRecord.deriveStatus(from: session.lastURL)
+    }
     sessionTerminationErrors.removeAll()
+    saveSessionChanges()
+  }
+
+  func dismissSessionFileError(filename: String) {
+    sessionFileErrors[filename] = nil
+  }
+
+  func dismissAllSessionFileErrors() {
+    sessionFileErrors.removeAll()
   }
 
   func refreshPlaywrightCLIStatus() {
     Task {
       playwrightCLIStatus = await cliStatusProvider.status()
     }
+  }
+
+  func setPersistenceDegraded(_ isDegraded: Bool) {
+    isPersistenceDegraded = isDegraded
+  }
+
+  func dismissPersistenceSaveError() {
+    lastPersistenceSaveError = nil
   }
 
   func clearClosedSessions() {
@@ -178,40 +229,6 @@ final class AppState {
     }
     sessions.removeAll { $0.status == .closed }
     saveSessionChanges()
-  }
-
-  func saveScreenshot(_ session: SessionRecord) -> URL? {
-    guard let data = session.lastScreenshot else { return nil }
-    let downloads = screenshotDirectoryProvider()
-    let filename = "\(session.sessionId)-\(Self.filenameTimestamp()).jpg"
-    let url = downloads.appendingPathComponent(filename)
-
-    do {
-      try data.write(to: url, options: .atomic)
-      lastSavedScreenshotURL = url
-      return url
-    } catch {
-      return nil
-    }
-  }
-
-  func openCurrentURL(_ session: SessionRecord) {
-    guard let urlString = session.lastURL,
-      let url = URL(string: urlString),
-      ["http", "https"].contains(url.scheme?.lowercased())
-    else {
-      return
-    }
-    NSWorkspace.shared.open(url)
-  }
-
-  func openCDPInspector(_ session: SessionRecord) {
-    guard session.cdpPort > 0,
-      let url = URL(string: "http://localhost:\(session.cdpPort)")
-    else {
-      return
-    }
-    NSWorkspace.shared.open(url)
   }
 
   func reorder(sourceId: String, targetId: String) -> Bool {
@@ -235,36 +252,48 @@ final class AppState {
     guard let manager = sessionManager else { return }
     manager.syncWithWatcher()
     sessions = manager.allSessions
+    sessionFileErrors = manager.sessionFileErrors
   }
 
   private func persistSessionChanges() {
     do {
-      try modelContext?.save()
+      try modelContextSaver(modelContext)
+      lastPersistenceSaveError = nil
     } catch {
+      lastPersistenceSaveError = error.localizedDescription
       modelContext?.rollback()
       performSync()
     }
   }
 
+  private func beginTerminating(_ session: SessionRecord) {
+    if selectedSessionId == session.sessionId {
+      selectedSessionId = nil
+    }
+    session.beginClosing()
+    sessionTerminationErrors[session.sessionId] = nil
+    saveSessionChanges()
+  }
+
   private func terminate(_ session: SessionRecord) async {
     do {
       try await sessionTerminator.close(sessionId: session.sessionId)
+      session.close(byUser: true)
       sessionTerminationErrors[session.sessionId] = nil
+      saveSessionChanges()
     } catch {
+      session.markCloseFailed()
       sessionTerminationErrors[session.sessionId] = error.localizedDescription
+      saveSessionChanges()
     }
-  }
-
-  private static func filenameTimestamp(date: Date = Date()) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.string(from: date)
-      .replacingOccurrences(of: ":", with: "-")
-      .replacingOccurrences(of: ".", with: "-")
   }
 
   private static func defaultScreenshotDirectory() -> URL {
     FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
+  }
+
+  private static func defaultModelContextSaver(_ modelContext: ModelContext?) throws {
+    try modelContext?.save()
   }
 }

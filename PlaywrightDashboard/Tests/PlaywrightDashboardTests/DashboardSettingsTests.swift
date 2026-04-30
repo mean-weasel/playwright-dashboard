@@ -43,4 +43,14 @@ struct DashboardSettingsTests {
     defaults.set(0, forKey: DashboardSettings.closedSessionRetentionHoursKey)
     #expect(DashboardSettings.closedSessionRetention(defaults: defaults) == nil)
   }
+
+  @Test("forced expanded snapshot fallback defaults off and can be enabled")
+  func forceExpandedSnapshotFallback() {
+    let defaults = UserDefaults(suiteName: "DashboardSettingsTests-\(UUID().uuidString)")!
+
+    #expect(DashboardSettings.forceExpandedSnapshotFallback(defaults: defaults) == false)
+
+    defaults.set(true, forKey: DashboardSettings.forceExpandedSnapshotFallbackKey)
+    #expect(DashboardSettings.forceExpandedSnapshotFallback(defaults: defaults))
+  }
 }
