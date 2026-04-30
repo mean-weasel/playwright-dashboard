@@ -6,6 +6,7 @@ struct InteractiveScreenshotSurface: View {
   let interactionEnabled: Bool
   let onClick: (CGPoint) -> Void
   let onScroll: (CGPoint, CGFloat, CGFloat) -> Void
+  let onKeyPress: (CDPClient.KeyEventInput) -> Void
 
   var body: some View {
     GeometryReader { proxy in
@@ -48,6 +49,9 @@ struct InteractiveScreenshotSurface: View {
                 )
               else { return }
               onScroll(browserPoint, deltaX, deltaY)
+            },
+            onKeyPress: { input in
+              onKeyPress(input)
             }
           )
           .frame(width: imageFrame.width, height: imageFrame.height)

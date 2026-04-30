@@ -14,6 +14,47 @@ struct Sidebar: View {
 
   var body: some View {
     List(selection: $selectedFilter) {
+      if appState.isPersistenceDegraded {
+        Section("Storage") {
+          Label {
+            Text("Changes won't be saved")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          } icon: {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+              .foregroundStyle(.orange)
+          }
+        }
+        .accessibilityIdentifier("session-file-errors-section")
+      }
+
+      if let saveError = appState.lastPersistenceSaveError {
+        Section("Save Error") {
+          VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+              Image(systemName: "externaldrive.badge.xmark")
+                .foregroundStyle(.red)
+              Text("Changes were not saved")
+                .font(.caption)
+              Spacer()
+              Button {
+                appState.dismissPersistenceSaveError()
+              } label: {
+                Image(systemName: "xmark")
+                  .font(.caption2)
+              }
+              .buttonStyle(.plain)
+              .help("Dismiss")
+            }
+            Text(saveError)
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+              .lineLimit(2)
+          }
+          .padding(.vertical, 2)
+        }
+      }
+
       Section("Status") {
         sidebarRow(
           filter: .allOpen,
@@ -70,6 +111,43 @@ struct Sidebar: View {
 
           Button {
             appState.dismissAllTerminationErrors()
+          } label: {
+            Label("Dismiss All", systemImage: "xmark.circle")
+          }
+          .buttonStyle(.plain)
+        }
+      }
+
+      if !appState.sessionFileErrors.isEmpty {
+        Section("Session File Errors") {
+          ForEach(sessionFileErrors, id: \.filename) { item in
+            VStack(alignment: .leading, spacing: 3) {
+              HStack(spacing: 6) {
+                Image(systemName: "doc.badge.exclamationmark")
+                  .foregroundStyle(.orange)
+                Text(item.filename)
+                  .font(.caption)
+                  .lineLimit(1)
+                Spacer()
+                Button {
+                  appState.dismissSessionFileError(filename: item.filename)
+                } label: {
+                  Image(systemName: "xmark")
+                    .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss")
+              }
+              Text(item.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+            .padding(.vertical, 2)
+          }
+
+          Button {
+            appState.dismissAllSessionFileErrors()
           } label: {
             Label("Dismiss All", systemImage: "xmark.circle")
           }
@@ -160,6 +238,12 @@ struct Sidebar: View {
     appState.sessionTerminationErrors
       .map { (sessionId: $0.key, message: $0.value) }
       .sorted { $0.sessionId.localizedCaseInsensitiveCompare($1.sessionId) == .orderedAscending }
+  }
+
+  private var sessionFileErrors: [(filename: String, message: String)] {
+    appState.sessionFileErrors
+      .map { (filename: $0.key, message: $0.value) }
+      .sorted { $0.filename.localizedCaseInsensitiveCompare($1.filename) == .orderedAscending }
   }
 
   private var workspaces: [(name: String, count: Int)] {

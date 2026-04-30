@@ -122,6 +122,10 @@ struct SessionCard: View {
       statusBadgeOverlay(text: "Idle", color: .orange, icon: nil)
     case .stale:
       staleBadgeOverlay
+    case .closing:
+      statusBadgeOverlay(text: "Closing", color: .blue, icon: nil)
+    case .closeFailed:
+      statusBadgeOverlay(text: "Close Failed", color: .red, icon: "exclamationmark.triangle.fill")
     case .closed:
       statusBadgeOverlay(text: "Closed", color: .secondary, icon: nil)
     }

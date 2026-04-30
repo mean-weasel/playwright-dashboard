@@ -140,6 +140,24 @@ final class FSEventsStream: Sendable {
     debounceWork = work
     queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
   }
+
+  static func events(
+    paths: [String],
+    eventFlags: UnsafePointer<FSEventStreamEventFlags>,
+    count: Int
+  ) -> [Event]? {
+    guard count >= 0, paths.count >= count else { return nil }
+
+    var events: [Event] = []
+    events.reserveCapacity(count)
+
+    for i in 0..<count {
+      let flags = EventFlags(rawValue: eventFlags[i])
+      events.append(Event(path: paths[i], flags: flags))
+    }
+
+    return events
+  }
 }
 
 // MARK: - FSEvents C Callback
@@ -156,15 +174,11 @@ private func fsEventsCallback(
   let watcher = Unmanaged<FSEventsStream>.fromOpaque(info).takeUnretainedValue()
 
   // eventPaths is a CFArray of CFString when kFSEventStreamCreateFlagUseCFTypes is set
-  let paths = unsafeBitCast(eventPaths, to: NSArray.self) as! [String]
-
-  var events: [FSEventsStream.Event] = []
-  events.reserveCapacity(numEvents)
-
-  for i in 0..<numEvents {
-    let flags = FSEventsStream.EventFlags(rawValue: eventFlags[i])
-    events.append(FSEventsStream.Event(path: paths[i], flags: flags))
-  }
+  let rawPaths = unsafeBitCast(eventPaths, to: NSArray.self)
+  guard
+    let paths = rawPaths as? [String],
+    let events = FSEventsStream.events(paths: paths, eventFlags: eventFlags, count: numEvents)
+  else { return }
 
   watcher.handleRawEvents(events)
 }

@@ -2,8 +2,12 @@ import SwiftUI
 
 struct DashboardWindow: View {
   @Environment(AppState.self) private var appState
-  @State private var selectedFilter: SidebarFilter? = .allOpen
+  @State private var selectedFilter: SidebarFilter?
   @State private var searchText = ""
+
+  init(initialFilter: SidebarFilter? = .allOpen) {
+    _selectedFilter = State(initialValue: initialFilter)
+  }
 
   var body: some View {
     NavigationSplitView {

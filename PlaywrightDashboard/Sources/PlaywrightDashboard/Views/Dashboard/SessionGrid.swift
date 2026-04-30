@@ -17,11 +17,8 @@ struct SessionGrid: View {
   var body: some View {
     Group {
       if filteredSessions.isEmpty {
-        ContentUnavailableView(
-          "No Sessions",
-          systemImage: "rectangle.grid.2x2",
-          description: Text("Active Playwright sessions will appear here.")
-        )
+        SessionEmptyState(filter: filter, searchText: searchText)
+          .environment(appState)
       } else {
         ScrollView {
           if isGroupedByWorkspace {

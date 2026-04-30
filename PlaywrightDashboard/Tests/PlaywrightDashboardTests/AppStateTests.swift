@@ -105,6 +105,31 @@ struct AppStateTests {
     #expect(savedSecond?.gridOrder == originalFirstOrder)
   }
 
+  @Test("session command save failures are published and dismissible")
+  func sessionCommandSaveFailuresArePublished() throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(name: "save-fail", workspace: harness.workspace("save-fail"))
+    ])
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      modelContextSaver: { _ in throw TestError.saveFailed }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    let session = try #require(appState.sessions.first)
+
+    appState.rename(session, to: "Unsaved Name")
+
+    #expect(appState.lastPersistenceSaveError == "saveFailed")
+
+    appState.dismissPersistenceSaveError()
+
+    #expect(appState.lastPersistenceSaveError == nil)
+  }
+
   @Test("closeStaleSessions clears a selected stale session")
   func closeStaleSessionsClearsSelection() throws {
     let harness = try TestSessionHarness()
@@ -160,6 +185,26 @@ struct AppStateTests {
     #expect(appState.sessions.map(\.sessionId) == ["open-session"])
   }
 
+  @Test("startSync publishes session file errors and dismisses them")
+  func startSyncPublishesSessionFileErrors() throws {
+    let harness = try TestSessionHarness()
+    let malformedFile = harness.root.appendingPathComponent("broken.session")
+    try "{ not-json".write(to: malformedFile, atomically: true, encoding: .utf8)
+    let appState = AppState(
+      sessionFileProvider: { [malformedFile] },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60)
+    )
+
+    appState.startSync(modelContext: harness.context)
+
+    #expect(appState.sessionFileErrors.keys.contains("broken.session"))
+
+    appState.dismissSessionFileError(filename: "broken.session")
+
+    #expect(appState.sessionFileErrors.isEmpty)
+  }
+
   @Test("closeAndTerminate archives locally and invokes terminator")
   func closeAndTerminateInvokesTerminator() async throws {
     let harness = try TestSessionHarness()
@@ -184,7 +229,7 @@ struct AppStateTests {
     }
 
     appState.closeAndTerminate(session)
-    try await Task.sleep(for: .milliseconds(50))
+    await waitUntil { session.status == .closed }
 
     #expect(session.status == .closed)
     #expect(session.userClosed == true)
@@ -214,8 +259,10 @@ struct AppStateTests {
     }
 
     appState.closeAndTerminate(session)
-    try await Task.sleep(for: .milliseconds(50))
+    await waitUntil { session.status == .closeFailed }
 
+    #expect(session.status == .closeFailed)
+    #expect(session.userClosed == false)
     #expect(appState.sessionTerminationErrors["fail-close"]?.contains("missing session") == true)
   }
 
@@ -237,11 +284,12 @@ struct AppStateTests {
     appState.startSync(modelContext: harness.context)
     let session = try #require(appState.sessions.first)
     appState.closeAndTerminate(session)
-    try await Task.sleep(for: .milliseconds(50))
+    await waitUntil { session.status == .closeFailed }
 
     appState.dismissTerminationError(sessionId: "fail-close")
 
     #expect(appState.sessionTerminationErrors.isEmpty)
+    #expect(session.status == .idle)
   }
 
   @Test("dismissAllTerminationErrors clears every recorded error")
@@ -264,11 +312,15 @@ struct AppStateTests {
     for session in appState.sessions {
       appState.closeAndTerminate(session)
     }
-    try await Task.sleep(for: .milliseconds(50))
+    await waitUntil {
+      appState.sessionTerminationErrors.keys.contains("fail-one")
+        && appState.sessionTerminationErrors.keys.contains("fail-two")
+    }
 
     appState.dismissAllTerminationErrors()
 
     #expect(appState.sessionTerminationErrors.isEmpty)
+    #expect(appState.sessions.allSatisfy { $0.status == .idle })
   }
 
   @Test("closeAndTerminateStaleSessions records termination errors")
@@ -293,9 +345,9 @@ struct AppStateTests {
     }
 
     appState.closeAndTerminateStaleSessions()
-    try await Task.sleep(for: .milliseconds(50))
+    await waitUntil { Set(appState.sessionTerminationErrors.keys) == ["stale-one", "stale-two"] }
 
-    #expect(appState.sessions.allSatisfy { $0.status == .closed })
+    #expect(appState.sessions.allSatisfy { $0.status == .closeFailed })
     #expect(Set(appState.sessionTerminationErrors.keys) == ["stale-one", "stale-two"])
   }
 
@@ -320,6 +372,138 @@ struct AppStateTests {
     #expect(savedURL.deletingLastPathComponent() == harness.root)
     #expect(try Data(contentsOf: savedURL) == Data([0x01, 0x02, 0x03]))
     #expect(appState.lastSavedScreenshotURL == savedURL)
+    #expect(appState.lastScreenshotSaveError == nil)
+  }
+
+  @Test("saveScreenshot records missing screenshot error")
+  func saveScreenshotMissingDataRecordsError() throws {
+    let harness = try TestSessionHarness()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      screenshotDirectoryProvider: { harness.root }
+    )
+    let session = SessionRecord(
+      sessionId: "shot",
+      autoLabel: "Shot",
+      workspaceDir: harness.workspace("shot"),
+      cdpPort: 9222,
+      socketPath: "/tmp/shot.sock"
+    )
+
+    #expect(appState.saveScreenshot(session) == nil)
+    #expect(appState.lastScreenshotSaveError == "No screenshot is available to save.")
+
+    appState.dismissScreenshotSaveError()
+
+    #expect(appState.lastScreenshotSaveError == nil)
+  }
+
+  @Test("saveScreenshot records write failure")
+  func saveScreenshotWriteFailureRecordsError() throws {
+    let harness = try TestSessionHarness()
+    let blockedURL = harness.root.appendingPathComponent("not-a-directory")
+    try "blocked".write(to: blockedURL, atomically: true, encoding: .utf8)
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      screenshotDirectoryProvider: { blockedURL }
+    )
+    let session = SessionRecord(
+      sessionId: "shot",
+      autoLabel: "Shot",
+      workspaceDir: harness.workspace("shot"),
+      cdpPort: 9222,
+      socketPath: "/tmp/shot.sock",
+      lastScreenshot: Data([0x01, 0x02, 0x03])
+    )
+
+    #expect(appState.saveScreenshot(session) == nil)
+    #expect(appState.lastScreenshotSaveError != nil)
+  }
+
+  @Test("openCurrentURL opens HTTP URL and clears errors")
+  func openCurrentURLOpensHTTPURL() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    appState.lastOpenURLError = "Previous error"
+    let session = SessionRecord(
+      sessionId: "url",
+      autoLabel: "URL",
+      workspaceDir: "/tmp/url",
+      cdpPort: 9222,
+      socketPath: "/tmp/url.sock",
+      lastURL: "https://example.com/path"
+    )
+
+    #expect(appState.openCurrentURL(session))
+    #expect(opener.urls.map(\.absoluteString) == ["https://example.com/path"])
+    #expect(appState.lastOpenURLError == nil)
+  }
+
+  @Test("openCurrentURL rejects unsupported URL schemes")
+  func openCurrentURLRejectsUnsupportedSchemes() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    let session = SessionRecord(
+      sessionId: "url",
+      autoLabel: "URL",
+      workspaceDir: "/tmp/url",
+      cdpPort: 9222,
+      socketPath: "/tmp/url.sock",
+      lastURL: "file:///tmp/index.html"
+    )
+
+    #expect(appState.openCurrentURL(session) == false)
+    #expect(opener.urls.isEmpty)
+    #expect(appState.lastOpenURLError == "Only HTTP and HTTPS URLs can be opened.")
+  }
+
+  @Test("openCDPInspector opens localhost inspector URL")
+  func openCDPInspectorOpensURL() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    let session = SessionRecord(
+      sessionId: "cdp",
+      autoLabel: "CDP",
+      workspaceDir: "/tmp/cdp",
+      cdpPort: 9333,
+      socketPath: "/tmp/cdp.sock"
+    )
+
+    #expect(appState.openCDPInspector(session))
+    #expect(opener.urls.map(\.absoluteString) == ["http://localhost:9333"])
+  }
+
+  @Test("external URL opener failure records error")
+  func externalURLOpenerFailureRecordsError() {
+    let opener = URLOpenerRecorder(result: false)
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    let session = SessionRecord(
+      sessionId: "url",
+      autoLabel: "URL",
+      workspaceDir: "/tmp/url",
+      cdpPort: 9222,
+      socketPath: "/tmp/url.sock",
+      lastURL: "https://example.com"
+    )
+
+    #expect(appState.openCurrentURL(session) == false)
+    #expect(appState.lastOpenURLError == "Could not open https://example.com.")
+
+    appState.dismissOpenURLError()
+
+    #expect(appState.lastOpenURLError == nil)
   }
 
   @Test("refreshPlaywrightCLIStatus publishes provider status")
@@ -332,7 +516,7 @@ struct AppStateTests {
     )
 
     appState.refreshPlaywrightCLIStatus()
-    try? await Task.sleep(for: .milliseconds(50))
+    await waitUntil { appState.playwrightCLIStatus == .available("2.0.0") }
 
     #expect(appState.playwrightCLIStatus == .available("2.0.0"))
   }
@@ -348,6 +532,42 @@ struct AppStateTests {
 
     func record(_ args: [String]) {
       commands.append(args)
+    }
+  }
+
+  private func waitUntil(
+    timeout: Duration = .seconds(2),
+    _ condition: @escaping @MainActor () -> Bool
+  ) async {
+    let startedAt = ContinuousClock.now
+    while !condition(), startedAt.duration(to: .now) < timeout {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+  }
+
+  @MainActor
+  private final class URLOpenerRecorder {
+    private let result: Bool
+    private(set) var urls: [URL] = []
+
+    init(result: Bool = true) {
+      self.result = result
+    }
+
+    func open(_ url: URL) -> Bool {
+      urls.append(url)
+      return result
+    }
+  }
+
+  private enum TestError: LocalizedError {
+    case saveFailed
+
+    var errorDescription: String? {
+      switch self {
+      case .saveFailed:
+        return "saveFailed"
+      }
     }
   }
 }

@@ -87,6 +87,19 @@ final class SessionRecord {
     if byUser { userClosed = true }
   }
 
+  /// Marks a user-requested close as in progress without hiding the live session yet.
+  func beginClosing() {
+    status = .closing
+    closedAt = nil
+  }
+
+  /// Marks a failed close attempt while keeping the session visible for retry/recovery.
+  func markCloseFailed() {
+    status = .closeFailed
+    closedAt = nil
+    userClosed = false
+  }
+
   /// Reopens a closed session, resetting it to idle.
   func reopen() {
     status = .idle
@@ -99,12 +112,29 @@ final class SessionRecord {
   func updateFromScreenshot(_ result: CDPClient.ScreenshotResult) {
     guard status != .closed else { return }
 
+    let didChangeContent = result.url != lastURL || result.title != lastTitle
     lastScreenshot = result.jpeg
     lastURL = result.url
     lastTitle = result.title
-    lastActivityAt = Date()
+    if didChangeContent {
+      lastActivityAt = Date()
+    }
 
+    guard status != .closing && status != .closeFailed else { return }
     status = Self.deriveStatus(from: result.url)
+  }
+
+  /// Marks an active or idle session as stale when it has been inactive past `threshold`.
+  @discardableResult
+  func markStaleIfInactive(threshold: TimeInterval, now: Date = Date()) -> Bool {
+    guard threshold > 0 else { return false }
+    guard status == .active || status == .idle else { return false }
+
+    let staleCutoff = now.addingTimeInterval(-threshold)
+    guard lastActivityAt < staleCutoff else { return false }
+
+    status = .stale
+    return true
   }
 
   /// Derives session status from a page URL.

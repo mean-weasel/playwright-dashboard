@@ -20,15 +20,18 @@ final class DaemonWatcher {
       .appendingPathComponent("Library/Caches/ms-playwright/daemon", isDirectory: true)
   }()
 
+  private let daemonDirectory: URL
   private var stream: FSEventsStream?
   private var directoryCheckTimer: DispatchSourceTimer?
   private let fileManager = FileManager.default
 
-  init() {}
+  init(daemonDirectory: URL = DaemonWatcher.daemonDirectory) {
+    self.daemonDirectory = daemonDirectory
+  }
 
   /// Begin watching the daemon directory. If it doesn't exist yet, polls until it appears.
   func start() {
-    let path = Self.daemonDirectory.path
+    let path = daemonDirectory.path
 
     if fileManager.fileExists(atPath: path) {
       startWatching(path: path)
@@ -84,8 +87,8 @@ final class DaemonWatcher {
   }
 
   /// Scans the daemon directory recursively for `.session` files.
-  private func scanSessionFiles() {
-    let baseURL = Self.daemonDirectory
+  func scanSessionFiles() {
+    let baseURL = daemonDirectory
 
     guard fileManager.fileExists(atPath: baseURL.path) else {
       sessionFiles = []

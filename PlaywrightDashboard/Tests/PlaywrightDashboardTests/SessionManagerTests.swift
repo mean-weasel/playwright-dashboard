@@ -173,4 +173,46 @@ struct SessionManagerTests {
     #expect(manager.allSessions[0].status == .closed)
     #expect(manager.allSessions[0].userClosed == true)
   }
+
+  @Test("Records malformed session file errors without blocking valid sessions")
+  func recordsMalformedSessionFiles() throws {
+    let harness = try TestSessionHarness()
+    let validFile = try harness.writeSession(
+      name: "valid", workspace: harness.workspace("valid"), port: 9222)
+    let malformedFile = harness.root.appendingPathComponent("broken.session")
+    try "{ not-json".write(to: malformedFile, atomically: true, encoding: .utf8)
+
+    let manager = SessionManager(
+      sessionFileProvider: { [malformedFile, validFile] },
+      modelContext: harness.context
+    )
+
+    manager.syncWithWatcher()
+
+    #expect(manager.allSessions.map(\.sessionId) == ["valid"])
+    #expect(manager.sessionFileErrors.keys.contains("broken.session"))
+  }
+
+  @Test("Clears session file errors after file parses successfully")
+  func clearsSessionFileErrorsAfterSuccessfulParse() throws {
+    let harness = try TestSessionHarness()
+    let file = harness.root.appendingPathComponent("recover.session")
+    try "{ not-json".write(to: file, atomically: true, encoding: .utf8)
+    let provider = TestSessionFileProvider(files: [file])
+    let manager = SessionManager(
+      sessionFileProvider: { provider.files },
+      modelContext: harness.context
+    )
+
+    manager.syncWithWatcher()
+    #expect(manager.sessionFileErrors.keys.contains("recover.session"))
+
+    provider.files = [
+      try harness.writeSession(name: "recover", workspace: harness.workspace("recover"), port: 9222)
+    ]
+    manager.syncWithWatcher()
+
+    #expect(manager.sessionFileErrors.isEmpty)
+    #expect(manager.allSessions.map(\.sessionId) == ["recover"])
+  }
 }

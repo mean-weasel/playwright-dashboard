@@ -42,15 +42,59 @@ extension CDPClient {
     ]
   }
 
+  struct KeyEventInput: Sendable {
+    let key: String
+    let code: String?
+    let text: String?
+    let nativeVirtualKeyCode: Int
+    let modifiers: Int
+
+    var isPrintable: Bool {
+      guard let text else { return false }
+      return !text.isEmpty
+        && text.unicodeScalars.allSatisfy {
+          !CharacterSet.controlCharacters.contains($0)
+        }
+    }
+  }
+
+  static func keyEventParams(
+    type: String,
+    input: KeyEventInput,
+    includeText: Bool
+  ) -> [String: Any] {
+    var params: [String: Any] = [
+      "type": type,
+      "key": input.key,
+      "windowsVirtualKeyCode": input.nativeVirtualKeyCode,
+      "nativeVirtualKeyCode": input.nativeVirtualKeyCode,
+      "modifiers": input.modifiers,
+    ]
+    if let code = input.code {
+      params["code"] = code
+    }
+    if includeText, let text = input.text {
+      params["text"] = text
+      params["unmodifiedText"] = text
+    }
+    return params
+  }
+
   static func pageForScreenshot(from pages: [PageInfo]) -> PageInfo? {
-    pages.first(where: { page in
+    let debuggablePages = pages.filter { page in
+      page.type == "page"
+        && page.webSocketDebuggerUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          == false
+    }
+
+    return debuggablePages.first(where: { page in
       guard page.type == "page",
         let url = page.url?.trimmingCharacters(in: .whitespacesAndNewlines)
       else {
         return false
       }
       return !url.isEmpty && url != "about:blank"
-    }) ?? pages.first(where: { $0.type == "page" })
+    }) ?? debuggablePages.first
   }
 
   static func isCommandResponse(_ text: String, expectedId: Int) throws -> Bool {
