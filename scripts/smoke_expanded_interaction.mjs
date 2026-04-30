@@ -35,12 +35,18 @@ let server;
 const events = [];
 const accessibilityHelp = [
   "macOS denied assistive access for the process running this smoke test.",
-  "Grant Accessibility access to your terminal app and the Node.js binary that runs this harness.",
+  "Grant Accessibility access to every process identity in the launch chain: terminal/editor, Node.js, osascript, and any wrapper/helper.",
   `Node.js binary: ${process.execPath}`,
+  "osascript binary: /usr/bin/osascript",
   "System Settings > Privacy & Security > Accessibility",
+  "After changing Accessibility settings, quit and reopen the terminal/editor before rerunning QA.",
 ].join("\n");
 
 try {
+  // Kill any leftover instance so `open --args` delivers fresh launch arguments.
+  await run("pkill", ["-x", "PlaywrightDashboard"]).catch(() => {});
+  await sleep(1_000);
+
   server = await startEventServer(events);
   const pageURL = `http://127.0.0.1:${server.port}/`;
   const debugPort = await freePort();
@@ -97,11 +103,7 @@ try {
     await assertSurfacePixelsChange(points.initialRect, firstSurfaceShot, secondSurfaceShot);
   }
 
-  await activateApp();
-  await run(path.join(repoRoot, "scripts", "post_pointer_events.swift"), [
-    String(points.initialX),
-    String(points.initialY),
-  ]);
+  await postPointerSequence(points.initialX, points.initialY);
 
   await waitFor(() => {
     const types = new Set(events.map((event) => event.type));
@@ -109,11 +111,7 @@ try {
   }, "page click and wheel events");
 
   const resizedPoints = parseResizeScriptResult(await runAppleScript(resizeScript()));
-  await activateApp();
-  await run(path.join(repoRoot, "scripts", "post_pointer_events.swift"), [
-    String(resizedPoints.x),
-    String(resizedPoints.y),
-  ]);
+  await postPointerSequence(resizedPoints.x, resizedPoints.y);
 
   await waitFor(() => {
     return events.filter((event) => event.type === "click").length >= 2;
@@ -145,7 +143,21 @@ try {
 }
 
 function activateApp() {
-  return run("osascript", ["-e", 'tell application "PlaywrightDashboard" to activate']);
+  return run("osascript", [
+    "-e",
+    'tell application "PlaywrightDashboard" to activate',
+    "-e",
+    'tell application "System Events" to set frontmost of process "PlaywrightDashboard" to true',
+  ]);
+}
+
+async function postPointerSequence(x, y) {
+  await activateApp();
+  await sleep(500);
+  const helper = path.join(repoRoot, "scripts", "post_pointer_events.swift");
+  await run(helper, [String(x), String(y)]);
+  await sleep(250);
+  await run(helper, [String(x), String(y)]);
 }
 
 async function stopChrome() {
@@ -344,7 +356,10 @@ function testPage() {
         }
         fetch(url, { cache: 'no-store' }).catch(() => {});
       }
-      document.addEventListener('click', () => record('click'));
+      document.addEventListener('click', () => {
+        input.focus();
+        record('click');
+      });
       document.addEventListener('wheel', () => record('wheel'), { passive: true });
       document.addEventListener('keydown', (event) => record('keydown', { key: event.key }));
       input.addEventListener('input', () => record('input', { value: input.value }));
@@ -493,13 +508,39 @@ on waitForProcess(processName, maxAttempts)
   return false
 end waitForProcess
 
+on waitForNamedElement(processName, elementName, maxAttempts)
+  repeat with attempt from 1 to maxAttempts
+    tell application "System Events"
+      tell process processName
+        if (count of windows) > 0 then
+          set allItems to entire contents of window 1
+        else
+          set allItems to UI elements
+        end if
+        repeat with itemRef in allItems
+          try
+            if (value of attribute "AXIdentifier" of itemRef as string) is elementName then return itemRef
+          end try
+        end repeat
+      end tell
+    end tell
+    delay 0.5
+  end repeat
+  error "Timed out waiting for " & elementName
+end waitForNamedElement
+
 set appName to "PlaywrightDashboard"
 if not waitForProcess(appName, 30) then error "PlaywrightDashboard process did not launch"
 
+-- Click the screenshot surface to ensure PointerCaptureView is first responder.
+-- Screenshot polling re-renders can displace it between the previous click and typing.
+set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 10)
 tell application "System Events"
   tell process appName
     set frontmost to true
   end tell
+  click surface
+  delay 0.5
   keystroke "abc"
   delay 0.2
   key code 51

@@ -6,6 +6,18 @@ struct SessionFileConfig: Decodable {
   struct BrowserConfig: Decodable {
     struct LaunchOptions: Decodable {
       let args: [String]
+      let cdpPort: Int?
+
+      enum CodingKeys: String, CodingKey {
+        case args
+        case cdpPort
+      }
+
+      init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        args = try container.decodeIfPresent([String].self, forKey: .args) ?? []
+        cdpPort = try container.decodeIfPresent(Int.self, forKey: .cdpPort)
+      }
     }
 
     let launchOptions: LaunchOptions
@@ -14,6 +26,10 @@ struct SessionFileConfig: Decodable {
   let browser: BrowserConfig
 
   var cdpPort: Int? {
+    if let cdpPort = browser.launchOptions.cdpPort {
+      return cdpPort
+    }
+
     let prefix = "--remote-debugging-port="
     for arg in browser.launchOptions.args where arg.hasPrefix(prefix) {
       return Int(arg.dropFirst(prefix.count))

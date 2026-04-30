@@ -28,6 +28,27 @@ struct PointerCaptureView: NSViewRepresentable {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
+    override init(frame frameRect: NSRect) {
+      super.init(frame: frameRect)
+      wantsLayer = true
+      layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    required init?(coder: NSCoder) {
+      super.init(coder: coder)
+      wantsLayer = true
+      layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+      guard !isHidden, alphaValue > 0, bounds.contains(point) else { return nil }
+      return self
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+      true
+    }
+
     override func mouseDown(with event: NSEvent) {
       window?.makeFirstResponder(self)
       onClick?(convert(event.locationInWindow, from: nil))

@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -11,7 +11,9 @@ else {
   exit(2)
 }
 
-let point = CGPoint(x: x, y: y)
+let screenHeight = NSScreen.screens.first?.frame.height ?? 0
+let eventY = screenHeight > 0 ? screenHeight - y : y
+let point = CGPoint(x: x, y: eventY)
 let source = CGEventSource(stateID: .hidSystemState)
 
 func post(_ event: CGEvent?) {
@@ -19,18 +21,20 @@ func post(_ event: CGEvent?) {
   usleep(120_000)
 }
 
-post(
-  CGEvent(
-    mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left
-  ))
-post(
-  CGEvent(
-    mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point,
-    mouseButton: .left))
-post(
-  CGEvent(
-    mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point,
-    mouseButton: .left))
-post(
-  CGEvent(
-    scrollWheelEvent2Source: source, units: .line, wheelCount: 1, wheel1: -6, wheel2: 0, wheel3: 0))
+let moved = CGEvent(
+  mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)
+let pressed = CGEvent(
+  mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point,
+  mouseButton: .left)
+pressed?.setIntegerValueField(.mouseEventClickState, value: 1)
+let released = CGEvent(
+  mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+released?.setIntegerValueField(.mouseEventClickState, value: 1)
+let wheel = CGEvent(
+  scrollWheelEvent2Source: source, units: .line, wheelCount: 1, wheel1: -6, wheel2: 0, wheel3: 0)
+wheel?.location = point
+
+post(moved)
+post(pressed)
+post(released)
+post(wheel)

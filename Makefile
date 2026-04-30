@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-snapshot-baseline visual-snapshot-compare install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-snapshot-baseline visual-snapshot-compare install clean qa
 
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
@@ -88,8 +88,15 @@ $(PACKAGE_BUNDLE): build
 		'</plist>' > $(PACKAGE_BUNDLE)/Contents/Info.plist
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 
+CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | head -1 | sed 's/.*"\(.*\)"/\1/' || echo -)
+
 sign-package: $(PACKAGE_BUNDLE)
-	codesign --force --sign - --timestamp=none $(PACKAGE_BUNDLE)
+	@if codesign --force --sign "$(CODESIGN_IDENTITY)" $(PACKAGE_BUNDLE) 2>/dev/null; then \
+		echo "Signed with: $(CODESIGN_IDENTITY)"; \
+	else \
+		echo "Developer signing failed, falling back to ad-hoc signing"; \
+		codesign --force --sign - --timestamp=none $(PACKAGE_BUNDLE); \
+	fi
 
 package: sign-package
 	rm -f $(DIST_DIR)/$(APP_NAME).zip
@@ -112,7 +119,10 @@ validate-package: package
 	codesign --verify --strict --deep $(DIST_DIR)/zipcheck/$(APP_NAME).app
 	rm -rf $(DIST_DIR)/zipcheck
 
-smoke-app: validate-package
+check-accessibility:
+	scripts/check_accessibility.mjs
+
+smoke-app: check-accessibility validate-package
 	@if [ "$$RUN_GUI_SMOKE" != "1" ]; then \
 		echo "Set RUN_GUI_SMOKE=1 to launch the macOS app smoke test"; \
 		exit 2; \

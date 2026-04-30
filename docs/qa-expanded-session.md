@@ -2,10 +2,15 @@
 
 ## Prerequisites
 
-- macOS with Accessibility permission granted for Terminal or the shell runner.
-- Accessibility permission granted for the Node.js binary that runs this script
-  when macOS prompts for it. The harness prints the exact `process.execPath`
-  to add under System Settings > Privacy & Security > Accessibility.
+- macOS with Accessibility permission granted for every process identity in the
+  shell-driven AppleScript launch chain: the terminal/editor that launches the
+  command, the Node.js binary that runs this script, `/usr/bin/osascript`, and
+  any wrapper or helper binary used to start the command. Run
+  `make check-accessibility` first; if macOS denies access, the probe prints the
+  exact Node.js `process.execPath` to add under System Settings > Privacy &
+  Security > Accessibility. Quit and reopen the terminal/editor after changing
+  Accessibility settings. To add `/usr/bin/osascript`, use the file picker
+  shortcut `Cmd+Shift+G`, enter `/usr/bin/osascript`, and select it.
 - Google Chrome installed at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, or set `CHROME_PATH`.
 - A packaged app bundle built with `make validate-package`.
 

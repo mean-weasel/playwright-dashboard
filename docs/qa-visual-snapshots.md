@@ -4,10 +4,26 @@ The visual snapshot harness captures deterministic dashboard screenshots from th
 
 ## Local
 
-Prerequisite: grant Accessibility permission to the terminal app and the Node.js
-binary that runs the harness. If macOS denies access, the script prints the
-exact `process.execPath` to add under System Settings > Privacy & Security >
-Accessibility.
+Prerequisite: grant Accessibility permission to every process identity macOS
+attributes to the shell-driven AppleScript launch chain:
+
+- the terminal or editor that launches the command, such as Terminal, iTerm,
+  VS Code, Cursor, or Codex,
+- the Node.js binary that runs the harness,
+- `/usr/bin/osascript`,
+- any wrapper or helper binary used to start the command.
+
+Run the local probe before GUI QA:
+
+```sh
+make check-accessibility
+```
+
+If macOS denies access, the probe and snapshot harness print the exact
+`process.execPath` for Node.js. Add or enable the listed apps/binaries under
+System Settings > Privacy & Security > Accessibility, then quit and reopen the
+terminal or editor before rerunning QA. To add `/usr/bin/osascript`, use the
+file picker shortcut `Cmd+Shift+G`, enter `/usr/bin/osascript`, and select it.
 
 ```sh
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots

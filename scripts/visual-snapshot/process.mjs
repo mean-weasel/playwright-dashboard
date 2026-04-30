@@ -6,9 +6,11 @@ import path from "node:path";
 
 const accessibilityHelp = [
   "macOS denied assistive access for the process running this script.",
-  "Grant Accessibility access to your terminal app and the Node.js binary that runs this harness.",
+  "Grant Accessibility access to every process identity in the launch chain: terminal/editor, Node.js, osascript, and any wrapper/helper.",
   `Node.js binary: ${process.execPath}`,
+  "osascript binary: /usr/bin/osascript",
   "System Settings > Privacy & Security > Accessibility",
+  "After changing Accessibility settings, quit and reopen the terminal/editor before rerunning QA.",
 ].join("\n");
 
 export function run(command, args) {
