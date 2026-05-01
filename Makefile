@@ -88,13 +88,16 @@ $(PACKAGE_BUNDLE): build
 		'</plist>' > $(PACKAGE_BUNDLE)/Contents/Info.plist
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 
-CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | head -1 | sed 's/.*"\(.*\)"/\1/' || echo -)
+CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -m1 '"' | sed 's/.*"\(.*\)"/\1/' || echo -)
 
 sign-package: $(PACKAGE_BUNDLE)
-	@if codesign --force --sign "$(CODESIGN_IDENTITY)" $(PACKAGE_BUNDLE) 2>/dev/null; then \
+	@if [ "$(CODESIGN_IDENTITY)" = "-" ]; then \
+		echo "No developer signing identity found, using ad-hoc signing"; \
+		codesign --force --sign - --timestamp=none $(PACKAGE_BUNDLE); \
+	elif codesign --force --sign "$(CODESIGN_IDENTITY)" $(PACKAGE_BUNDLE); then \
 		echo "Signed with: $(CODESIGN_IDENTITY)"; \
 	else \
-		echo "Developer signing failed, falling back to ad-hoc signing"; \
+		echo "ERROR: codesign failed with identity '$(CODESIGN_IDENTITY)'. Falling back to ad-hoc signing."; \
 		codesign --force --sign - --timestamp=none $(PACKAGE_BUNDLE); \
 	fi
 

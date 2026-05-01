@@ -11,13 +11,23 @@ else {
   exit(2)
 }
 
-let screenHeight = NSScreen.screens.first?.frame.height ?? 0
-let eventY = screenHeight > 0 ? screenHeight - y : y
+guard let screen = NSScreen.screens.first else {
+  fputs("Error: No screens available. Cannot compute event coordinates.\n", stderr)
+  exit(1)
+}
+
+// Convert from top-left (accessibility/screen coordinates) to bottom-left (Quartz CGEvent coordinates).
+let screenHeight = screen.frame.height
+let eventY = screenHeight - y
 let point = CGPoint(x: x, y: eventY)
 let source = CGEventSource(stateID: .hidSystemState)
 
 func post(_ event: CGEvent?) {
-  event?.post(tap: .cghidEventTap)
+  guard let event else {
+    fputs("Error: CGEvent creation returned nil. Check Accessibility/Input Monitoring permissions.\n", stderr)
+    exit(1)
+  }
+  event.post(tap: .cghidEventTap)
   usleep(120_000)
 }
 

@@ -133,7 +133,9 @@ try {
 } finally {
   if (appOpened) {
     await run("osascript", ["-e", 'tell application "PlaywrightDashboard" to quit']).catch(
-      () => {},
+      (error) => {
+        console.warn(`Warning: failed to quit PlaywrightDashboard during cleanup: ${error.message}`);
+      },
     );
   }
   await stopChrome();
@@ -194,7 +196,11 @@ async function writeSmokeArtifacts(error, events) {
 async function copyIfPresent(source, destination) {
   try {
     await copyFile(source, destination);
-  } catch {}
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn(`Warning: failed to copy artifact ${source}: ${error.message}`);
+    }
+  }
 }
 
 function parseUIScriptResult(output) {
@@ -276,7 +282,7 @@ async function createSessionFile(debugPort) {
       launchOptions: {
         headless: false,
         chromiumSandbox: false,
-        args: [`--remote-debugging-port=${debugPort}`],
+        cdpPort: debugPort,
       },
     },
   };

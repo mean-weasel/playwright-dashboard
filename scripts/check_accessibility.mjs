@@ -30,7 +30,7 @@ try {
     process.exit(1);
   }
   console.error(output);
-  process.exit(error.code || 1);
+  process.exit(1);
 }
 
 function run(command, args) {

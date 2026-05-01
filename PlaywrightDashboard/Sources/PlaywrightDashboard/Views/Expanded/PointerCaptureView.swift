@@ -40,11 +40,14 @@ struct PointerCaptureView: NSViewRepresentable {
       layer?.backgroundColor = NSColor.clear.cgColor
     }
 
+    // point is in superview coordinates; use frame (not bounds) for the containment check.
     override func hitTest(_ point: NSPoint) -> NSView? {
-      guard !isHidden, alphaValue > 0, bounds.contains(point) else { return nil }
+      guard !isHidden, alphaValue > 0, frame.contains(point) else { return nil }
       return self
     }
 
+    // Allow the first click on an inactive window to register as a real click
+    // rather than merely activating the window.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
       true
     }
