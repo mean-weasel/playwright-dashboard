@@ -4,11 +4,17 @@ struct SessionInfoBar: View {
   @Environment(AppState.self) private var appState
   let session: SessionRecord
   let onBack: () -> Void
+  let onNavigate: (String) async throws -> String
   @Binding var showMetadata: Bool
   @Binding var interactionEnabled: Bool
+  let connectionSummary: ExpandedConnectionSummary
   @State private var isEditing = false
   @State private var editText = ""
+  @State private var navigationText = ""
+  @State private var isNavigating = false
+  @State private var navigationError: String?
   @FocusState private var isFieldFocused: Bool
+  @FocusState private var isURLFieldFocused: Bool
 
   var body: some View {
     HStack(spacing: 12) {
@@ -51,14 +57,9 @@ struct SessionInfoBar: View {
 
       Spacer()
 
-      if let url = session.lastURL, !url.isEmpty {
-        Text(url)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .frame(maxWidth: 300)
-      }
+      navigationControl
+
+      connectionSummary
 
       if let error = appState.lastScreenshotSaveError {
         warningLabel("Save failed", message: error) {
@@ -69,6 +70,12 @@ struct SessionInfoBar: View {
       if let error = appState.lastOpenURLError {
         warningLabel("Open failed", message: error) {
           appState.dismissOpenURLError()
+        }
+      }
+
+      if let error = navigationError {
+        warningLabel("Navigate failed", message: error) {
+          navigationError = nil
         }
       }
 
@@ -108,22 +115,26 @@ struct SessionInfoBar: View {
       .accessibilityIdentifier("expanded-open-cdp-inspector")
       .help("Open CDP inspector")
 
-      Button {
-        interactionEnabled.toggle()
-      } label: {
-        Image(systemName: interactionEnabled ? "cursorarrow.click.2" : "cursorarrow.click")
-          .font(.body)
+      Picker(
+        "Interaction mode",
+        selection: Binding(
+          get: { interactionEnabled },
+          set: { interactionEnabled = $0 }
+        )
+      ) {
+        Label("View", systemImage: "eye").tag(false)
+        Label("Control", systemImage: "cursorarrow.click.2").tag(true)
       }
-      .buttonStyle(.plain)
+      .pickerStyle(.segmented)
+      .controlSize(.small)
+      .frame(width: 150)
       .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
-      .accessibilityLabel(
-        interactionEnabled ? "Disable screenshot interaction" : "Enable screenshot interaction"
-      )
-      .accessibilityIdentifier("expanded-interaction-toggle")
+      .accessibilityLabel("Browser interaction mode")
+      .accessibilityIdentifier("expanded-interaction-mode")
       .help(
         interactionEnabled
-          ? "Disable click, scroll, and keyboard forwarding"
-          : "Enable click, scroll, and keyboard forwarding from the refreshed screenshot")
+          ? "Click, scroll, and keyboard input are forwarded to the browser surface."
+          : "Browser frames are view-only; input is not forwarded.")
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -141,11 +152,77 @@ struct SessionInfoBar: View {
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
     .background(.bar)
+    .onAppear {
+      syncNavigationText()
+    }
+    .onChange(of: session.lastURL) {
+      guard !isURLFieldFocused, !isNavigating else { return }
+      syncNavigationText()
+    }
   }
 
   private func commitRename() {
     appState.rename(session, to: editText)
     isEditing = false
+  }
+
+  private var navigationControl: some View {
+    HStack(spacing: 6) {
+      TextField("URL", text: $navigationText)
+        .textFieldStyle(.roundedBorder)
+        .controlSize(.small)
+        .font(.caption)
+        .frame(width: 280)
+        .focused($isURLFieldFocused)
+        .onSubmit {
+          beginNavigation()
+        }
+        .disabled(session.cdpPort <= 0 || isNavigating)
+        .accessibilityLabel("Navigate URL")
+        .accessibilityIdentifier("expanded-navigate-url-field")
+
+      Button {
+        beginNavigation()
+      } label: {
+        if isNavigating {
+          ProgressView()
+            .controlSize(.small)
+            .frame(width: 14, height: 14)
+        } else {
+          Image(systemName: "arrow.right.circle")
+            .font(.body)
+        }
+      }
+      .buttonStyle(.plain)
+      .disabled(
+        session.cdpPort <= 0 || isNavigating
+          || navigationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      )
+      .accessibilityLabel("Navigate")
+      .accessibilityIdentifier("expanded-navigate-url-button")
+      .help("Navigate current page")
+    }
+  }
+
+  private func syncNavigationText() {
+    navigationText = session.lastURL.flatMap { $0.isEmpty ? nil : $0 } ?? ""
+  }
+
+  private func beginNavigation() {
+    guard !isNavigating else { return }
+    let requestedURL = navigationText
+    isNavigating = true
+    navigationError = nil
+    Task {
+      do {
+        let normalizedURL = try await onNavigate(requestedURL)
+        navigationText = normalizedURL
+        isURLFieldFocused = false
+      } catch {
+        navigationError = error.localizedDescription
+      }
+      isNavigating = false
+    }
   }
 
   private func warningLabel(

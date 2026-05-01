@@ -39,21 +39,20 @@ actor CDPClient {
     return try JSONDecoder().decode([PageInfo].self, from: data)
   }
 
-  struct ScreenshotResult: Sendable {
-    let jpeg: Data
-    let url: String?
-    let title: String?
-  }
-
   /// Captures a JPEG screenshot of the first available page.
-  func captureScreenshot(quality: Int = 50) async throws -> ScreenshotResult {
+  func captureScreenshot(quality: Int = 50, targetId: String? = nil) async throws
+    -> ScreenshotResult
+  {
     let clampedQuality = max(0, min(100, quality))
     let pages = try await listPages()
+    let pageTargets = CDPPageTargetSelection.selectableTargets(from: pages)
 
-    // Pick the first "page" type that has a real URL (not about:blank)
     guard
-      let page = Self.pageForScreenshot(from: pages),
-      let wsURLString = page.webSocketDebuggerUrl,
+      let pageTarget = CDPPageTargetSelection.selectedTarget(
+        from: pageTargets,
+        preferredTargetId: targetId
+      ),
+      let wsURLString = pageTarget.webSocketDebuggerUrl,
       let wsURL = URL(string: wsURLString)
     else {
       throw CDPError.noPages
@@ -78,7 +77,12 @@ actor CDPClient {
     }
     try await sendWebSocketMessage(.string(commandString), to: ws)
 
-    return try await waitForScreenshotResponse(from: ws, id: id, page: page)
+    return try await waitForScreenshotResponse(
+      from: ws,
+      id: id,
+      pageTarget: pageTarget,
+      pageTargets: pageTargets
+    )
   }
 
   func dispatchMouseClick(x: Double, y: Double) async throws {
@@ -117,180 +121,49 @@ actor CDPClient {
     ])
   }
 
-  // MARK: - Errors
-
-  enum CDPError: Error, LocalizedError {
-    case noPages
-    case invalidResponse
-    case timeout
-    case protocolError(String)
-
-    var errorDescription: String? {
-      switch self {
-      case .noPages: "No pages available on this CDP port"
-      case .invalidResponse: "Invalid screenshot response from CDP"
-      case .timeout: "Timed out waiting for CDP response"
-      case .protocolError(let msg): "CDP error: \(msg)"
-      }
-    }
+  func dispatchMouseClick(x: Double, y: Double, targetId: String?) async throws {
+    try await sendCommands(
+      [
+        (
+          method: "Input.dispatchMouseEvent",
+          params: Self.mouseEventParams(
+            type: "mousePressed", x: x, y: y, button: "left", clickCount: 1)
+        ),
+        (
+          method: "Input.dispatchMouseEvent",
+          params: Self.mouseEventParams(
+            type: "mouseReleased", x: x, y: y, button: "left", clickCount: 1)
+        ),
+      ], targetId: targetId)
   }
 
-  static func parseScreenshotResponse(
-    _ text: String,
-    expectedId: Int,
-    page: PageInfo
-  ) throws -> ScreenshotResult? {
-    guard let responseData = text.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-      let responseId = json["id"] as? Int,
-      responseId == expectedId
-    else {
-      return nil
-    }
-
-    if let error = json["error"] as? [String: Any] {
-      let message = error["message"] as? String ?? "Unknown CDP error"
-      throw CDPError.protocolError(message)
-    }
-
-    guard let result = json["result"] as? [String: Any],
-      let base64String = result["data"] as? String,
-      let jpeg = Data(base64Encoded: base64String)
-    else {
-      throw CDPError.invalidResponse
-    }
-
-    return ScreenshotResult(jpeg: jpeg, url: page.url, title: page.title)
-  }
-
-  private func sendCommand(method: String, params: [String: Any]) async throws {
-    try await sendCommands([(method: method, params: params)])
-  }
-
-  private func sendCommands(_ commands: [(method: String, params: [String: Any])]) async throws {
-    let pages = try await listPages()
-    guard
-      let page = Self.pageForScreenshot(from: pages),
-      let wsURLString = page.webSocketDebuggerUrl,
-      let wsURL = URL(string: wsURLString)
-    else {
-      throw CDPError.noPages
-    }
-
-    let ws = session.webSocketTask(with: wsURL)
-    ws.resume()
-    defer { ws.cancel(with: .normalClosure, reason: nil) }
-
-    for command in commands {
-      let id = nextId
-      nextId += 1
-      let commandString = try Self.commandString(
-        id: id, method: command.method, params: command.params)
-      try await sendWebSocketMessage(.string(commandString), to: ws)
-      try await waitForCommandResponse(from: ws, id: id)
-    }
-  }
-
-  private func waitForScreenshotResponse(
-    from webSocket: URLSessionWebSocketTask,
-    id: Int,
-    page: PageInfo
-  ) async throws -> ScreenshotResult {
-    try await withTimeout(requestTimeout) {
-      while !Task.isCancelled {
-        let message = try await self.receiveWebSocketMessage(from: webSocket)
-        switch message {
-        case .string(let text):
-          if let result = try Self.parseScreenshotResponse(text, expectedId: id, page: page) {
-            return result
-          }
-
-        case .data:
-          continue  // Skip binary messages
-
-        @unknown default:
-          continue
-        }
-      }
-
-      throw CDPError.timeout
-    }
-  }
-
-  private func waitForCommandResponse(
-    from webSocket: URLSessionWebSocketTask,
-    id: Int
+  func dispatchMouseWheel(
+    x: Double,
+    y: Double,
+    deltaX: Double,
+    deltaY: Double,
+    targetId: String?
   ) async throws {
-    try await withTimeout(requestTimeout) {
-      while !Task.isCancelled {
-        let message = try await self.receiveWebSocketMessage(from: webSocket)
-        if case .string(let text) = message, try Self.isCommandResponse(text, expectedId: id) {
-          return
-        }
-      }
-
-      throw CDPError.timeout
-    }
+    try await sendCommand(
+      method: "Input.dispatchMouseEvent",
+      params: Self.mouseWheelParams(x: x, y: y, deltaX: deltaX, deltaY: deltaY),
+      targetId: targetId
+    )
   }
 
-  func withTimeout<T: Sendable>(
-    _ timeout: Duration,
-    operation: @escaping @Sendable () async throws -> T
-  ) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-      group.addTask {
-        try await operation()
-      }
-      group.addTask {
-        try await Task.sleep(for: timeout)
-        throw CDPError.timeout
-      }
-      defer { group.cancelAll() }
-
-      guard let result = try await group.next() else {
-        throw CDPError.timeout
-      }
-      return result
-    }
+  func dispatchKeyPress(_ input: KeyEventInput, targetId: String?) async throws {
+    let downType = input.isPrintable ? "keyDown" : "rawKeyDown"
+    try await sendCommands(
+      [
+        (
+          method: "Input.dispatchKeyEvent",
+          params: Self.keyEventParams(type: downType, input: input, includeText: input.isPrintable)
+        ),
+        (
+          method: "Input.dispatchKeyEvent",
+          params: Self.keyEventParams(type: "keyUp", input: input, includeText: false)
+        ),
+      ], targetId: targetId)
   }
 
-  func sendWebSocketMessage(
-    _ message: URLSessionWebSocketTask.Message,
-    to webSocket: URLSessionWebSocketTask
-  ) async throws {
-    try await withThrowingTaskGroup(of: Void.self) { group in
-      group.addTask {
-        try await webSocket.send(message)
-      }
-      group.addTask {
-        try await Task.sleep(for: self.requestTimeout)
-        webSocket.cancel(with: .goingAway, reason: nil)
-        throw CDPError.timeout
-      }
-      defer { group.cancelAll() }
-
-      _ = try await group.next()
-    }
-  }
-
-  func receiveWebSocketMessage(
-    from webSocket: URLSessionWebSocketTask
-  ) async throws -> URLSessionWebSocketTask.Message {
-    try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
-      group.addTask {
-        try await webSocket.receive()
-      }
-      group.addTask {
-        try await Task.sleep(for: self.requestTimeout)
-        webSocket.cancel(with: .goingAway, reason: nil)
-        throw CDPError.timeout
-      }
-      defer { group.cancelAll() }
-
-      guard let result = try await group.next() else {
-        throw CDPError.timeout
-      }
-      return result
-    }
-  }
 }

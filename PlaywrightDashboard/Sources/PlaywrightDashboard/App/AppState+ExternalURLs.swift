@@ -19,12 +19,20 @@ extension AppState {
 
   @discardableResult
   func openCDPInspector(_ session: SessionRecord) -> Bool {
-    guard session.cdpPort > 0,
-      let url = URL(string: "http://localhost:\(session.cdpPort)")
-    else {
+    guard session.cdpPort > 0 else {
       lastOpenURLError = "No CDP inspector URL is available."
       return false
     }
+
+    let url =
+      session.selectedPageTarget?.devToolsFrontendURL(port: session.cdpPort)
+      ?? URL(string: "http://localhost:\(session.cdpPort)")
+
+    guard let url else {
+      lastOpenURLError = "No CDP inspector URL is available."
+      return false
+    }
+
     return openExternalURL(url)
   }
 

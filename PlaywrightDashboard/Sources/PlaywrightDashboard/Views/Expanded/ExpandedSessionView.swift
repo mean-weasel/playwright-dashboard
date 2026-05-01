@@ -4,27 +4,36 @@ import SwiftUI
 private let logger = Logger(subsystem: "PlaywrightDashboard", category: "ExpandedSessionView")
 
 struct ExpandedSessionView: View {
-  @Environment(AppState.self) private var appState
+  @Environment(AppState.self) var appState
   let session: SessionRecord
   @AppStorage("expandedShowMetadata") private var showMetadata = true
   @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
-  @State private var consecutiveFailures = 0
-  @State private var pageConnection: CDPPageConnection?
-  @State private var fallbackInputClient: CDPClient?
-  @State private var isScreencasting = false
-  @State private var isSnapshotFallback = false
-  @State private var frameCountSinceSave = 0
+  @State var consecutiveFailures = 0
+  @State var pageConnection: CDPPageConnection?
+  @State var fallbackInputClient: CDPClient?
+  @State var isScreencasting = false
+  @State var isSnapshotFallback = false
+  @State var frameMode: ExpandedFrameMode = .waiting
+  @State var targetMonitorMode: ExpandedTargetMonitorMode = .connecting
+  @State var lastTargetRefreshError: String?
+  @State var lastCDPError: String?
+  @State var frameCountSinceSave = 0
+  private var selectedTargetKey: String {
+    session.selectedTargetId ?? "default"
+  }
 
   /// Show a warning after this many consecutive CDP failures.
-  private let failureWarningThreshold = 5
+  let failureWarningThreshold = 5
 
   var body: some View {
     VStack(spacing: 0) {
       SessionInfoBar(
         session: session,
         onBack: { appState.selectedSessionId = nil },
+        onNavigate: navigate,
         showMetadata: $showMetadata,
-        interactionEnabled: $interactionEnabled
+        interactionEnabled: $interactionEnabled,
+        connectionSummary: connectionSummary
       )
 
       Divider()
@@ -33,14 +42,23 @@ struct ExpandedSessionView: View {
         screenshotArea
         if showMetadata {
           Divider()
-          SessionMetadataPanel(session: session)
-            .transition(.move(edge: .trailing))
+          SessionMetadataPanel(
+            session: session,
+            frameMode: frameMode,
+            targetMonitorMode: targetMonitorMode,
+            lastCDPError: lastCDPError,
+            lastTargetError: lastTargetRefreshError
+          )
+          .transition(.move(edge: .trailing))
         }
       }
       .animation(.easeInOut(duration: 0.2), value: showMetadata)
     }
-    .task(id: session.sessionId) {
+    .task(id: "\(session.sessionId):\(selectedTargetKey)") {
       await streamOrFallbackLoop()
+    }
+    .task(id: session.sessionId) {
+      await targetRefreshLoop()
     }
   }
 
@@ -49,17 +67,7 @@ struct ExpandedSessionView: View {
   private var screenshotArea: some View {
     Group {
       if session.cdpPort <= 0 {
-        VStack(spacing: 12) {
-          Image(systemName: "antenna.radiowaves.left.and.right.slash")
-            .font(.largeTitle)
-            .foregroundStyle(.secondary)
-          Text("No CDP port available")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-          Text("This session doesn't have browser debugging enabled.")
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-        }
+        ExpandedNoCDPState()
       } else if let nsImage = session.screenshotImage {
         ZStack(alignment: .topTrailing) {
           InteractiveScreenshotSurface(
@@ -72,8 +80,7 @@ struct ExpandedSessionView: View {
           .padding(20)
 
           ExpandedRefreshBadge(
-            isScreencasting: isScreencasting,
-            isSnapshotFallback: isSnapshotFallback
+            frameMode: frameMode
           )
           .padding(28)
 
@@ -90,24 +97,9 @@ struct ExpandedSessionView: View {
           }
         }
       } else if consecutiveFailures >= failureWarningThreshold {
-        VStack(spacing: 12) {
-          Image(systemName: "exclamationmark.triangle")
-            .font(.largeTitle)
-            .foregroundStyle(.orange)
-          Text("Unable to connect to browser")
-            .font(.subheadline)
-          Text("CDP port \(session.cdpPort) is not responding.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+        ExpandedConnectionFailedState(cdpPort: session.cdpPort)
       } else {
-        VStack(spacing: 12) {
-          ProgressView()
-            .controlSize(.large)
-          Text("Loading browser snapshot...")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
+        ExpandedLoadingSnapshotState()
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -121,9 +113,14 @@ struct ExpandedSessionView: View {
         if let pageConnection {
           try await pageConnection.dispatchMouseClick(x: point.x, y: point.y)
         } else {
-          try await currentFallbackInputClient().dispatchMouseClick(x: point.x, y: point.y)
+          try await currentFallbackInputClient().dispatchMouseClick(
+            x: point.x,
+            y: point.y,
+            targetId: session.selectedTargetId
+          )
         }
       } catch {
+        lastCDPError = error.localizedDescription
         logger.warning("Mouse click dispatch failed: \(error.localizedDescription)")
       }
     }
@@ -145,10 +142,12 @@ struct ExpandedSessionView: View {
             x: point.x,
             y: point.y,
             deltaX: Double(deltaX),
-            deltaY: Double(-deltaY)
+            deltaY: Double(-deltaY),
+            targetId: session.selectedTargetId
           )
         }
       } catch {
+        lastCDPError = error.localizedDescription
         logger.warning("Mouse wheel dispatch failed: \(error.localizedDescription)")
       }
     }
@@ -161,12 +160,38 @@ struct ExpandedSessionView: View {
         if let pageConnection {
           try await pageConnection.dispatchKeyPress(input)
         } else {
-          try await currentFallbackInputClient().dispatchKeyPress(input)
+          try await currentFallbackInputClient().dispatchKeyPress(
+            input,
+            targetId: session.selectedTargetId
+          )
         }
       } catch {
+        lastCDPError = error.localizedDescription
         logger.warning("Key dispatch failed: \(error.localizedDescription)")
       }
     }
+  }
+
+  private func navigate(to rawURL: String) async throws -> String {
+    guard session.cdpPort > 0 else {
+      throw CDPClient.CDPError.noPages
+    }
+
+    let normalizedURL: String
+    if let pageConnection {
+      normalizedURL = try await pageConnection.navigate(to: rawURL)
+    } else {
+      normalizedURL = try await currentFallbackInputClient().navigate(
+        to: rawURL,
+        targetId: session.selectedTargetId
+      )
+    }
+
+    session.lastURL = normalizedURL
+    session.status = SessionRecord.deriveStatus(from: normalizedURL)
+    session.lastActivityAt = Date()
+    appState.saveSessionChanges()
+    return normalizedURL
   }
 
   private func currentFallbackInputClient() -> CDPClient {
@@ -176,100 +201,17 @@ struct ExpandedSessionView: View {
     return client
   }
 
-  // MARK: - Refresh
+}
 
-  private func streamOrFallbackLoop() async {
-    guard session.cdpPort > 0 else { return }
-    let connection = CDPPageConnection(port: session.cdpPort)
-    pageConnection = connection
-    fallbackInputClient = nil
-    isScreencasting = false
-    isSnapshotFallback = false
-    frameCountSinceSave = 0
-
-    if DashboardSettings.forceExpandedSnapshotFallback() {
-      isSnapshotFallback = true
-      await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
-      return
-    }
-
-    do {
-      let frames = try await connection.startScreencast(
-        quality: DashboardSettings.expandedQuality())
-      for try await frame in frames {
-        guard !Task.isCancelled, session.status != .closed else { break }
-        applyScreencastFrame(frame)
-      }
-      await connection.close()
-      pageConnection = nil
-    } catch is CancellationError {
-      await connection.close()
-      pageConnection = nil
-      return
-    } catch {
-      await connection.close()
-      pageConnection = nil
-      isScreencasting = false
-      isSnapshotFallback = true
-      consecutiveFailures += 1
-      logger.warning(
-        "Screencast failed on port \(session.cdpPort): \(error.localizedDescription). Falling back to screenshot polling."
-      )
-      await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
-    }
-  }
-
-  private func applyScreencastFrame(_ frame: CDPClient.ScreencastFrame) {
-    let result = CDPClient.ScreenshotResult(
-      jpeg: frame.jpeg,
-      url: frame.url,
-      title: frame.title
+extension ExpandedSessionView {
+  var connectionSummary: ExpandedConnectionSummary {
+    ExpandedConnectionSummary(
+      frameMode: frameMode,
+      targetMode: targetMonitorMode,
+      targetCount: session.pageTargets.count,
+      selectedTarget: session.selectedPageTarget,
+      lastCDPError: lastCDPError,
+      lastTargetError: lastTargetRefreshError
     )
-    session.updateFromScreenshot(result)
-    isScreencasting = true
-    isSnapshotFallback = false
-    consecutiveFailures = 0
-    frameCountSinceSave += 1
-
-    // Persist occasional frames so Save Screenshot and session history have recent data
-    // without writing SwiftData on every screencast frame.
-    if frameCountSinceSave >= 30 {
-      frameCountSinceSave = 0
-      appState.saveSessionChanges()
-    }
-  }
-
-  /// Polls CDP for screenshots when Page.startScreencast is unavailable.
-  private func fastRefreshLoop() async {
-    await fastRefreshLoop(client: CDPClient(port: session.cdpPort))
-  }
-
-  private func fastRefreshLoop(client: CDPClient) async {
-    guard session.cdpPort > 0 else { return }
-    fallbackInputClient = client
-
-    while !Task.isCancelled {
-      guard session.status != .closed else { break }
-
-      do {
-        let result = try await client.captureScreenshot(
-          quality: DashboardSettings.expandedQuality())
-        guard session.status != .closed else { break }
-        session.updateFromScreenshot(result)
-        appState.saveSessionChanges()
-        consecutiveFailures = 0
-      } catch is CancellationError {
-        break
-      } catch {
-        consecutiveFailures += 1
-        logger.warning(
-          "Fast refresh failed on port \(session.cdpPort) (\(consecutiveFailures)x): \(error.localizedDescription)"
-        )
-      }
-
-      do {
-        try await Task.sleep(for: DashboardSettings.expandedRefreshDuration())
-      } catch { break }
-    }
   }
 }

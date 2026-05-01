@@ -1,6 +1,26 @@
 import Foundation
 
 extension CDPClient {
+  enum NavigationError: Error, LocalizedError, Equatable {
+    case emptyURL
+    case invalidURL
+    case unsupportedScheme(String)
+    case navigationFailed(String)
+
+    var errorDescription: String? {
+      switch self {
+      case .emptyURL:
+        return "Enter a URL to navigate."
+      case .invalidURL:
+        return "Enter a valid HTTP or HTTPS URL."
+      case .unsupportedScheme(let scheme):
+        return "Only HTTP and HTTPS URLs can be opened. \(scheme) is not supported."
+      case .navigationFailed(let message):
+        return "Navigation failed: \(message)"
+      }
+    }
+  }
+
   static func commandString(id: Int, method: String, params: [String: Any]) throws -> String {
     let command: [String: Any] = ["id": id, "method": method, "params": params]
     let data = try JSONSerialization.data(withJSONObject: command, options: [.sortedKeys])
@@ -8,6 +28,56 @@ extension CDPClient {
       throw CDPError.invalidResponse
     }
     return string
+  }
+
+  static func normalizedNavigationURLString(_ rawValue: String) throws -> String {
+    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      throw NavigationError.emptyURL
+    }
+
+    let valueWithScheme: String
+    if trimmed.contains("://") {
+      valueWithScheme = trimmed
+    } else if Self.looksLikeUnsupportedScheme(trimmed) {
+      let scheme = trimmed.split(separator: ":", maxSplits: 1).first.map(String.init) ?? trimmed
+      throw NavigationError.unsupportedScheme(scheme)
+    } else {
+      valueWithScheme = "https://\(trimmed)"
+    }
+
+    guard var components = URLComponents(string: valueWithScheme),
+      let scheme = components.scheme?.lowercased(),
+      ["http", "https"].contains(scheme)
+    else {
+      let scheme = URLComponents(string: valueWithScheme)?.scheme ?? "unknown"
+      throw NavigationError.unsupportedScheme(scheme)
+    }
+
+    components.scheme = scheme
+    guard components.host?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
+      let url = components.url
+    else {
+      throw NavigationError.invalidURL
+    }
+
+    return url.absoluteString
+  }
+
+  static func pageNavigateParams(url: String) -> [String: Any] {
+    ["url": url]
+  }
+
+  static func pageNavigateErrorText(from text: String) -> String? {
+    guard let data = text.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let result = json["result"] as? [String: Any],
+      let errorText = result["errorText"] as? String,
+      !errorText.isEmpty
+    else {
+      return nil
+    }
+    return errorText
   }
 
   static func mouseEventParams(
@@ -81,20 +151,15 @@ extension CDPClient {
   }
 
   static func pageForScreenshot(from pages: [PageInfo]) -> PageInfo? {
-    let debuggablePages = pages.filter { page in
-      page.type == "page"
-        && page.webSocketDebuggerUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          == false
+    guard
+      let target = CDPPageTargetSelection.selectedTarget(
+        from: pages,
+        preferredTargetId: nil
+      )
+    else {
+      return nil
     }
-
-    return debuggablePages.first(where: { page in
-      guard page.type == "page",
-        let url = page.url?.trimmingCharacters(in: .whitespacesAndNewlines)
-      else {
-        return false
-      }
-      return !url.isEmpty && url != "about:blank"
-    }) ?? debuggablePages.first
+    return pages.first { $0.id == target.id }
   }
 
   static func isCommandResponse(_ text: String, expectedId: Int) throws -> Bool {
@@ -112,5 +177,22 @@ extension CDPClient {
     }
 
     return true
+  }
+
+  private static func looksLikeUnsupportedScheme(_ value: String) -> Bool {
+    guard let colonIndex = value.firstIndex(of: ":") else { return false }
+    let prefix = value[..<colonIndex]
+    guard
+      prefix.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*$"#, options: .regularExpression)
+        != nil
+    else {
+      return false
+    }
+
+    let suffix = value[value.index(after: colonIndex)...]
+    let pathStart = suffix.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" })
+    let portCandidate = pathStart.map { suffix[..<$0] } ?? suffix[...]
+    return portCandidate.isEmpty
+      || portCandidate.range(of: #"^[0-9]+$"#, options: .regularExpression) == nil
   }
 }

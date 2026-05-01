@@ -22,7 +22,7 @@ struct InteractiveScreenshotSurface: View {
           .overlay {
             if interactionEnabled {
               RoundedRectangle(cornerRadius: 8)
-                .stroke(.green, lineWidth: 2)
+                .stroke(.green, lineWidth: 3)
             }
           }
           .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
@@ -59,7 +59,10 @@ struct InteractiveScreenshotSurface: View {
         }
       }
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel("Browser screenshot")
+      .accessibilityLabel(
+        interactionEnabled
+          ? "Browser surface in control mode" : "Browser surface in view mode"
+      )
       .accessibilityIdentifier("expanded-screenshot-surface")
     }
   }

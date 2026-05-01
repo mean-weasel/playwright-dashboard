@@ -7,12 +7,29 @@ export const cases = [
     name: "empty-dashboard",
     window: "dashboard",
     expectedElement: "session-empty-state",
+    assertions: {
+      identifiers: ["session-empty-state", "session-empty-state-title"],
+      identifierPrefixes: {
+        "session-card-": 0,
+      },
+    },
     sessions: [],
   },
   {
     name: "populated-dashboard",
     window: "dashboard",
     expectedElement: "session-card-visual-active",
+    assertions: {
+      identifiers: [
+        "session-card-visual-active",
+        "session-card-visual-idle",
+        "session-card-visual-stale",
+        "session-card-visual-review",
+      ],
+      identifierPrefixes: {
+        "session-card-visual-": 4,
+      },
+    },
     sessions: [
       sessionFixture("visual-active", "Visual Active", "dashboard", 9222),
       sessionFixture("visual-idle", "Visual Idle", "idle-worktree", 0),
@@ -24,6 +41,10 @@ export const cases = [
     name: "settings",
     window: "settings",
     expectedElement: "settings-view",
+    assertions: {
+      identifiers: ["settings-view"],
+      names: ["Launch at login"],
+    },
     sessions: [],
   },
   {
@@ -33,6 +54,12 @@ export const cases = [
     finalExpectedElement: "session-card-visual-closed",
     afterLaunch: "closed-history",
     dashboardFilter: "closed",
+    assertions: {
+      identifiers: ["session-card-visual-closed"],
+      identifierPrefixes: {
+        "session-card-visual-": 1,
+      },
+    },
     sessions: [
       sessionFixture("visual-closed", "Visual Closed", "closed-worktree", 0),
     ],
@@ -41,6 +68,18 @@ export const cases = [
     name: "expanded-session",
     window: "expanded",
     expectedElement: "expanded-screenshot-surface",
+    assertions: {
+      identifiers: [
+        "expanded-screenshot-surface",
+        "expanded-connection-summary",
+        "expanded-save-screenshot",
+        "expanded-open-current-url",
+        "expanded-open-cdp-inspector",
+        "expanded-interaction-mode",
+        "expanded-metadata-toggle",
+      ],
+      names: ["Visual Expanded", "Live"],
+    },
   },
 ];
 

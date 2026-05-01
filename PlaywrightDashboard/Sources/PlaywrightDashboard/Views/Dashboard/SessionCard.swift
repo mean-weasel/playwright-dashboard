@@ -7,6 +7,7 @@ struct SessionCard: View {
   var onRename: (() -> Void)?
 
   @State private var isHovered = false
+  @FocusState private var isFocused: Bool
   @AppStorage("staleThresholdSeconds") private var staleThresholdSeconds = 120
 
   var body: some View {
@@ -14,10 +15,26 @@ struct SessionCard: View {
       // Screenshot area with 16:10 aspect ratio
       ZStack(alignment: .topTrailing) {
         screenshotArea
+        VStack {
+          HStack(alignment: .top) {
+            SessionCardActionOverlay(
+              session: session,
+              showsActions: showsActions,
+              onRename: { onRename?() }
+            )
+            Spacer()
+          }
+          Spacer()
+          HStack {
+            SessionCardThumbnailState(session: session)
+            Spacer()
+          }
+        }
         statusOverlay
         if appState.sessionTerminationErrors[session.sessionId] != nil {
           terminationWarningOverlay
-            .padding(6)
+            .padding(.top, 28)
+            .padding(.trailing, 6)
         }
       }
       .aspectRatio(16.0 / 10.0, contentMode: .fit)
@@ -53,18 +70,20 @@ struct SessionCard: View {
     .overlay(
       RoundedRectangle(cornerRadius: 12)
         .strokeBorder(
-          isHovered ? Color.accentColor.opacity(0.6) : Color.clear,
+          showsActions ? Color.accentColor.opacity(0.6) : Color.clear,
           lineWidth: 2
         )
     )
     .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
+    .focusable(true)
+    .focused($isFocused)
     .onHover { hovering in
       isHovered = hovering
     }
     .onTapGesture {
       onSelect?()
     }
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: .contain)
     .accessibilityLabel(session.displayName)
     .accessibilityIdentifier("session-card-\(session.sessionId)")
     .contextMenu {
@@ -170,6 +189,10 @@ struct SessionCard: View {
       lastURL: session.lastURL, thresholdSeconds: staleThresholdSeconds)
   }
 
+  private var showsActions: Bool {
+    isHovered || isFocused || appState.sessionTerminationErrors[session.sessionId] != nil
+  }
+
   private var terminationWarningOverlay: some View {
     Image(systemName: "exclamationmark.triangle.fill")
       .font(.caption)
@@ -178,4 +201,5 @@ struct SessionCard: View {
       .background(.ultraThinMaterial, in: Circle())
       .help(appState.sessionTerminationErrors[session.sessionId] ?? "Close failed")
   }
+
 }

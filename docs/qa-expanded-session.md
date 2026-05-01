@@ -10,7 +10,9 @@
   exact Node.js `process.execPath` to add under System Settings > Privacy &
   Security > Accessibility. Quit and reopen the terminal/editor after changing
   Accessibility settings. To add `/usr/bin/osascript`, use the file picker
-  shortcut `Cmd+Shift+G`, enter `/usr/bin/osascript`, and select it.
+  shortcut `Cmd+Shift+G`, enter `/usr/bin/osascript`, and select it. The
+  smoke Make targets also run this probe before packaging or launching the app,
+  so missing permission should fail before the slower smoke setup starts.
 - Google Chrome installed at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, or set `CHROME_PATH`.
 - A packaged app bundle built with `make validate-package`.
 
@@ -37,12 +39,20 @@ RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 The smoke test launches Chrome with CDP, creates a temporary daemon `.session` file, opens the app directly into the expanded session view, and verifies:
 
 - The expanded view reaches `Live screencast`.
+- The screenshot surface, toolbar controls, metadata toggle, and interaction
+  mode control are present in the accessibility tree.
+- The screenshot surface has a usable size before and after window resize.
+- Enabling interaction exposes the `Control mode` state.
 - The browser surface updates while a page counter changes.
 - Pointer click and wheel events reach the page.
 - Click coordinates still work after resizing the app window.
 - Text input and special keys reach the page through the expanded surface.
 
-The fallback smoke launches the same packaged app with a smoke-only flag that forces the expanded view to skip `Page.startScreencast`. It verifies the `Snapshot fallback` badge and the same interaction path.
+The fallback smoke launches the same packaged app with a smoke-only flag that
+forces the expanded view to skip `Page.startScreencast`. It verifies the
+`Snapshot fallback` badge, the same structural controls, and the same
+interaction path. Pixel-change detection is only required in live screencast
+mode; fallback mode remains structural and event-driven.
 
 ## Expected UI
 
@@ -69,8 +79,12 @@ When `SMOKE_ARTIFACT_DIR` is set, the smoke test writes:
 - `ui-snapshot.txt`
 - `surface-before.png` and `surface-after.png` when available
 
-There is also a manual `GUI Smoke` GitHub Actions workflow that runs this smoke test and uploads those artifacts.
-The main `CI` workflow can run the same checks on demand with its `gui_smoke_mode` input, and the weekly scheduled CI run exercises both live and fallback modes.
+There is also a manual `GUI Smoke` GitHub Actions workflow that runs this smoke
+test and uploads those artifacts. The main `CI` workflow can run the same
+Chrome-backed checks on demand with its `gui_smoke_mode` input, and the weekly
+scheduled CI run exercises both live and fallback modes. Pull request CI gates
+only the non-live `visual-structure-smoke` subset documented in
+`docs/qa-visual-snapshots.md`.
 
 For manual failures, capture:
 

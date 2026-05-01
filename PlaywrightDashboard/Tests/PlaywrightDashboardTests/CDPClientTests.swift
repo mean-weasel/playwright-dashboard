@@ -114,6 +114,119 @@ struct CDPClientTests {
     #expect(CDPClient.pageForScreenshot(from: pages) == nil)
   }
 
+  @Test("target selection honors preferred debuggable target")
+  func targetSelectionHonorsPreferredTarget() {
+    let pages = [
+      makePage(id: "first", url: "http://localhost:3000", title: "First"),
+      makePage(id: "second", url: "about:blank", title: "Second"),
+    ]
+
+    let selected = CDPPageTargetSelection.selectedTarget(
+      from: pages,
+      preferredTargetId: "second"
+    )
+
+    #expect(selected?.id == "second")
+  }
+
+  @Test("target selection falls back when preferred target disappears")
+  func targetSelectionFallsBackWhenPreferredTargetDisappears() {
+    let pages = [
+      makePage(id: "blank", url: "about:blank"),
+      makePage(id: "app", url: "http://localhost:3000"),
+    ]
+
+    let selected = CDPPageTargetSelection.selectedTarget(
+      from: pages,
+      preferredTargetId: "missing"
+    )
+
+    #expect(selected?.id == "app")
+  }
+
+  @Test("target selection ignores preferred non-debuggable target")
+  func targetSelectionIgnoresPreferredNonDebuggableTarget() {
+    let pages = [
+      makePage(
+        id: "worker",
+        type: "service_worker",
+        url: "http://localhost/worker.js",
+        hasWebSocketDebuggerUrl: true
+      ),
+      makePage(id: "app", url: "http://localhost:3000"),
+    ]
+
+    let selected = CDPPageTargetSelection.selectedTarget(
+      from: pages,
+      preferredTargetId: "worker"
+    )
+
+    #expect(selected?.id == "app")
+  }
+
+  @Test("target monitor parses target lifecycle events")
+  func targetMonitorParsesTargetLifecycleEvents() throws {
+    let created = CDPTargetMonitor.parseTargetEvent(
+      """
+      {"method":"Target.targetCreated","params":{"targetInfo":{"targetId":"page-1","type":"page","title":"App","url":"http://localhost:3000"}}}
+      """,
+      port: 9333
+    )
+    let changed = CDPTargetMonitor.parseTargetEvent(
+      """
+      {"method":"Target.targetInfoChanged","params":{"targetInfo":{"targetId":"page-1","type":"page","title":"Renamed","url":"http://localhost:3001","webSocketDebuggerUrl":"ws://localhost:9333/devtools/page/page-1"}}}
+      """
+    )
+    let destroyed = CDPTargetMonitor.parseTargetEvent(
+      #"{"method":"Target.targetDestroyed","params":{"targetId":"page-1"}}"#
+    )
+
+    guard case .upsert(let createdTarget) = created else {
+      Issue.record("Expected targetCreated upsert")
+      return
+    }
+    #expect(createdTarget.id == "page-1")
+    #expect(createdTarget.isDebuggablePage)
+    #expect(createdTarget.webSocketDebuggerUrl == "ws://localhost:9333/devtools/page/page-1")
+
+    guard case .upsert(let changedTarget) = changed else {
+      Issue.record("Expected targetInfoChanged upsert")
+      return
+    }
+    #expect(changedTarget.title == "Renamed")
+
+    #expect(destroyed == .remove("page-1"))
+    #expect(CDPTargetMonitor.parseTargetEvent(#"{"id":1,"result":{}}"#) == nil)
+  }
+
+  @Test("target monitor discovers targets from browser websocket")
+  func targetMonitorDiscoversTargetsFromBrowserWebSocket() async throws {
+    let server = try FakeBrowserTargetServer()
+    try server.start()
+    defer { server.stop() }
+
+    let monitor = CDPTargetMonitor(port: server.port, requestTimeout: .seconds(2))
+    var updates = await monitor.targetUpdates().makeAsyncIterator()
+
+    let created = try await #require(updates.next())
+    #expect(created.map(\.id) == ["page-1"])
+    #expect(created.first?.title == "Fake App")
+    #expect(
+      created.first?.webSocketDebuggerUrl == "ws://localhost:\(server.port)/devtools/page/page-1"
+    )
+
+    let changed = try await #require(updates.next())
+    #expect(changed.map(\.id) == ["page-1"])
+    #expect(changed.first?.title == "Renamed App")
+    #expect(changed.first?.url == "http://localhost:3001")
+
+    let destroyed = try await #require(updates.next())
+    #expect(destroyed.isEmpty)
+    #expect(
+      server.receivedCommands().contains { $0.contains(#""method":"Target.setDiscoverTargets""#) }
+    )
+  }
+
   @Test("mouse event params build CDP click payloads")
   func mouseEventParams() {
     let params = CDPClient.mouseEventParams(
@@ -191,6 +304,61 @@ struct CDPClientTests {
     #expect(text.contains(#""type":"mouseReleased""#))
   }
 
+  @Test("normalizedNavigationURLString accepts HTTP HTTPS and bare hosts")
+  func normalizedNavigationURLStringAcceptsSupportedURLs() throws {
+    #expect(
+      try CDPClient.normalizedNavigationURLString("https://example.com/path?q=1")
+        == "https://example.com/path?q=1")
+    #expect(
+      try CDPClient.normalizedNavigationURLString("  HTTP://example.com/a b  ")
+        == "http://example.com/a%20b")
+    #expect(
+      try CDPClient.normalizedNavigationURLString("example.com/app")
+        == "https://example.com/app")
+    #expect(
+      try CDPClient.normalizedNavigationURLString("localhost:3000")
+        == "https://localhost:3000")
+  }
+
+  @Test("normalizedNavigationURLString rejects empty invalid and unsupported URLs")
+  func normalizedNavigationURLStringRejectsInvalidURLs() {
+    expectNavigationError(.emptyURL) {
+      try CDPClient.normalizedNavigationURLString("   ")
+    }
+    expectNavigationError(.unsupportedScheme("file")) {
+      try CDPClient.normalizedNavigationURLString("file:///tmp/index.html")
+    }
+    expectNavigationError(.unsupportedScheme("ftp")) {
+      try CDPClient.normalizedNavigationURLString("ftp://example.com")
+    }
+    expectNavigationError(.invalidURL) {
+      try CDPClient.normalizedNavigationURLString("https:///missing-host")
+    }
+  }
+
+  @Test("pageNavigateParams build Page.navigate command payload")
+  func pageNavigateParamsBuildCommandPayload() throws {
+    let normalizedURL = try CDPClient.normalizedNavigationURLString("example.com/dashboard")
+    let text = try CDPClient.commandString(
+      id: 4,
+      method: "Page.navigate",
+      params: CDPClient.pageNavigateParams(url: normalizedURL)
+    )
+
+    #expect(text.contains(#""id":4"#))
+    #expect(text.contains(#""method":"Page.navigate""#))
+    #expect(text.contains(#""url":"https:\/\/example.com\/dashboard""#))
+  }
+
+  @Test("pageNavigateErrorText extracts CDP navigation errors")
+  func pageNavigateErrorText() {
+    #expect(
+      CDPClient.pageNavigateErrorText(
+        from: #"{"id":4,"result":{"frameId":"A","errorText":"net::ERR_NAME_NOT_RESOLVED"}}"#)
+        == "net::ERR_NAME_NOT_RESOLVED")
+    #expect(CDPClient.pageNavigateErrorText(from: #"{"id":4,"result":{"frameId":"A"}}"#) == nil)
+  }
+
   @Test("isCommandResponse skips events and throws protocol errors")
   func isCommandResponse() throws {
     #expect(try CDPClient.isCommandResponse(#"{"method":"Page.event"}"#, expectedId: 3) == false)
@@ -202,6 +370,20 @@ struct CDPClientTests {
       Issue.record("Expected command response parsing to throw")
     } catch let error as CDPClient.CDPError {
       #expect(error.errorDescription == "CDP error: Bad input")
+    }
+  }
+
+  private func expectNavigationError(
+    _ expected: CDPClient.NavigationError,
+    operation: () throws -> String
+  ) {
+    do {
+      _ = try operation()
+      Issue.record("Expected navigation normalization to throw \(expected)")
+    } catch let error as CDPClient.NavigationError {
+      #expect(error == expected)
+    } catch {
+      Issue.record("Expected navigation error, got \(error)")
     }
   }
 
@@ -834,6 +1016,129 @@ struct CDPClientTests {
       bytes.withUnsafeBufferPointer { buffer in
         _ = send(fd, buffer.baseAddress, buffer.count, 0)
       }
+    }
+  }
+
+  private final class FakeBrowserTargetServer: @unchecked Sendable {
+    private let socketFD: Int32
+    private let lock = NSLock()
+    private let stopLock = NSLock()
+    private var commands: [String] = []
+    private var isStopped = false
+    private var acceptThread: Thread?
+    private(set) var port: Int = 0
+
+    init() throws {
+      signal(SIGPIPE, SIG_IGN)
+      socketFD = socket(AF_INET, SOCK_STREAM, 0)
+      guard socketFD >= 0 else { throw POSIXError(.EIO) }
+
+      var reuse: Int32 = 1
+      setsockopt(
+        socketFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout.size(ofValue: reuse)))
+
+      var address = sockaddr_in()
+      address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+      address.sin_family = sa_family_t(AF_INET)
+      address.sin_port = in_port_t(0).bigEndian
+      address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+
+      let bindResult = withUnsafePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+          bind(socketFD, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+      }
+      guard bindResult == 0 else { throw POSIXError(.EADDRINUSE) }
+      guard listen(socketFD, 2) == 0 else { throw POSIXError(.EIO) }
+
+      var boundAddress = sockaddr_in()
+      var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+      let nameResult = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+          getsockname(socketFD, sockaddrPointer, &length)
+        }
+      }
+      guard nameResult == 0 else { throw POSIXError(.EIO) }
+      port = Int(in_port_t(bigEndian: boundAddress.sin_port))
+    }
+
+    func start() throws {
+      let socketFD = socketFD
+      let port = port
+      acceptThread = Thread { [weak self] in
+        guard let self else { return }
+        let versionFD = accept(socketFD, nil, nil)
+        if versionFD >= 0 {
+          _ = FakeCDPServer.readHTTPRequest(from: versionFD)
+          FakeCDPServer.sendHTTPResponse(
+            to: versionFD,
+            body: #"{"webSocketDebuggerUrl":"ws://localhost:\#(port)/devtools/browser/browser-1"}"#
+          )
+          close(versionFD)
+        }
+
+        let webSocketFD = accept(socketFD, nil, nil)
+        guard webSocketFD >= 0 else { return }
+        defer { close(webSocketFD) }
+
+        let request = FakeCDPServer.readHTTPRequest(from: webSocketFD)
+        guard let key = FakeCDPServer.headerValue("Sec-WebSocket-Key", in: request) else {
+          return
+        }
+        FakeCDPServer.sendWebSocketHandshake(to: webSocketFD, key: key)
+
+        let command =
+          String(data: FakeCDPServer.readWebSocketFrame(from: webSocketFD), encoding: .utf8) ?? ""
+        self.record(command)
+        FakeCDPServer.sendWebSocketText(#"{"id":1,"result":{}}"#, to: webSocketFD)
+        FakeCDPServer.sendWebSocketText(
+          """
+          {"method":"Target.targetCreated","params":{"targetInfo":{"targetId":"page-1","type":"page","title":"Fake App","url":"http://localhost:3000"}}}
+          """,
+          to: webSocketFD
+        )
+        FakeCDPServer.sendWebSocketText(
+          """
+          {"method":"Target.targetInfoChanged","params":{"targetInfo":{"targetId":"page-1","type":"page","title":"Renamed App","url":"http://localhost:3001"}}}
+          """,
+          to: webSocketFD
+        )
+        FakeCDPServer.sendWebSocketText(
+          #"{"method":"Target.targetDestroyed","params":{"targetId":"page-1"}}"#,
+          to: webSocketFD
+        )
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      acceptThread?.start()
+    }
+
+    func stop() {
+      stopLock.lock()
+      guard !isStopped else {
+        stopLock.unlock()
+        return
+      }
+      isStopped = true
+      stopLock.unlock()
+
+      shutdown(socketFD, SHUT_RDWR)
+      close(socketFD)
+    }
+
+    func receivedCommands() -> [String] {
+      lock.lock()
+      defer { lock.unlock() }
+      return commands
+    }
+
+    deinit {
+      stop()
+    }
+
+    private func record(_ command: String) {
+      lock.lock()
+      commands.append(command)
+      lock.unlock()
     }
   }
 

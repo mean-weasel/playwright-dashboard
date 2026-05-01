@@ -17,6 +17,7 @@ struct SessionEmptyState: View {
         Text(title)
           .font(.title3)
           .fontWeight(.semibold)
+          .accessibilityIdentifier("session-empty-state-title")
         Text(message)
           .font(.subheadline)
           .foregroundStyle(.secondary)
@@ -47,7 +48,9 @@ struct SessionEmptyState: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding(32)
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(title)
+    .accessibilityValue(message)
     .accessibilityIdentifier("session-empty-state")
   }
 

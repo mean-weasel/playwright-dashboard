@@ -2,18 +2,21 @@ import Foundation
 
 actor CDPPageConnection {
   private let port: Int
+  private let targetId: String?
   private let requestTimeout: Duration
   private let session: URLSession
   private var webSocket: URLSessionWebSocketTask?
   private var receiveTask: Task<Void, Never>?
   private var nextId = 1
-  private var pendingCommands: [Int: CheckedContinuation<Void, Error>] = [:]
+  private var pendingCommands: [Int: CheckedContinuation<String, Error>] = [:]
   private var frameContinuation: AsyncThrowingStream<CDPClient.ScreencastFrame, Error>.Continuation?
-  private var page: CDPClient.PageInfo?
+  private var pageTarget: CDPPageTarget?
+  private var pageTargets: [CDPPageTarget] = []
   private var isClosed = false
 
-  init(port: Int, requestTimeout: Duration = .seconds(3)) {
+  init(port: Int, targetId: String? = nil, requestTimeout: Duration = .seconds(3)) {
     self.port = port
+    self.targetId = targetId
     self.requestTimeout = requestTimeout
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = requestTimeout.timeInterval
@@ -79,6 +82,19 @@ actor CDPPageConnection {
     )
   }
 
+  @discardableResult
+  func navigate(to rawURL: String) async throws -> String {
+    let normalizedURL = try CDPClient.normalizedNavigationURLString(rawURL)
+    let response = try await sendCommandAndWait(
+      method: "Page.navigate",
+      params: CDPClient.pageNavigateParams(url: normalizedURL)
+    )
+    if let errorText = CDPClient.pageNavigateErrorText(from: response) {
+      throw CDPClient.NavigationError.navigationFailed(errorText)
+    }
+    return normalizedURL
+  }
+
   func close() async {
     guard !isClosed else { return }
     isClosed = true
@@ -101,15 +117,20 @@ actor CDPPageConnection {
 
     let client = CDPClient(port: port, requestTimeout: requestTimeout)
     let pages = try await client.listPages()
+    let selectableTargets = CDPPageTargetSelection.selectableTargets(from: pages)
     guard
-      let selectedPage = CDPClient.pageForScreenshot(from: pages),
-      let wsURLString = selectedPage.webSocketDebuggerUrl,
+      let selectedTarget = CDPPageTargetSelection.selectedTarget(
+        from: selectableTargets,
+        preferredTargetId: targetId
+      ),
+      let wsURLString = selectedTarget.webSocketDebuggerUrl,
       let wsURL = URL(string: wsURLString)
     else {
       throw CDPClient.CDPError.noPages
     }
 
-    page = selectedPage
+    pageTarget = selectedTarget
+    pageTargets = selectableTargets
     let ws = session.webSocketTask(with: wsURL)
     webSocket = ws
     ws.resume()
@@ -142,7 +163,7 @@ actor CDPPageConnection {
       if let message = Self.protocolErrorMessage(from: text) {
         continuation.resume(throwing: CDPClient.CDPError.protocolError(message))
       } else {
-        continuation.resume()
+        continuation.resume(returning: text)
       }
       return
     }
@@ -152,8 +173,10 @@ actor CDPPageConnection {
       CDPClient.ScreencastFrame(
         jpeg: frame.jpeg,
         sessionId: frame.sessionId,
-        url: page?.url,
-        title: page?.title
+        url: pageTarget?.url,
+        title: pageTarget?.title,
+        targetId: pageTarget?.id,
+        pageTargets: pageTargets
       )
     )
     try await sendCommand(
@@ -162,12 +185,13 @@ actor CDPPageConnection {
     )
   }
 
-  private func sendCommandAndWait(method: String, params: [String: Any]) async throws {
+  @discardableResult
+  private func sendCommandAndWait(method: String, params: [String: Any]) async throws -> String {
     try await connectIfNeeded()
     let id = nextCommandId()
     let command = try CDPClient.commandString(id: id, method: method, params: params)
 
-    try await withCheckedThrowingContinuation { continuation in
+    return try await withCheckedThrowingContinuation { continuation in
       pendingCommands[id] = continuation
       Task {
         do {
