@@ -208,19 +208,28 @@ struct CDPClientTests {
     let monitor = CDPTargetMonitor(port: server.port, requestTimeout: .seconds(2))
     var updates = await monitor.targetUpdates().makeAsyncIterator()
 
-    let created = try await #require(updates.next())
+    guard let created = try await updates.next() else {
+      Issue.record("Expected initial target update")
+      return
+    }
     #expect(created.map(\.id) == ["page-1"])
     #expect(created.first?.title == "Fake App")
     #expect(
       created.first?.webSocketDebuggerUrl == "ws://localhost:\(server.port)/devtools/page/page-1"
     )
 
-    let changed = try await #require(updates.next())
+    guard let changed = try await updates.next() else {
+      Issue.record("Expected changed target update")
+      return
+    }
     #expect(changed.map(\.id) == ["page-1"])
     #expect(changed.first?.title == "Renamed App")
     #expect(changed.first?.url == "http://localhost:3001")
 
-    let destroyed = try await #require(updates.next())
+    guard let destroyed = try await updates.next() else {
+      Issue.record("Expected destroyed target update")
+      return
+    }
     #expect(destroyed.isEmpty)
     #expect(
       server.receivedCommands().contains { $0.contains(#""method":"Target.setDiscoverTargets""#) }
