@@ -65,7 +65,7 @@ struct PlaywrightDashboardApp: App {
         "Playwright Dashboard",
         systemImage: activeSessionCount > 0
           ? "\(min(activeSessionCount, 50)).circle"
-          : "display"
+          : "theatermasks"
       )
     }
     .menuBarExtraStyle(.window)

@@ -198,17 +198,29 @@ struct MenubarPopover: View {
   }
 
   private var footer: some View {
-    Button {
-      openWindow(id: "dashboard")
-    } label: {
-      Text("Open Dashboard")
-        .font(.subheadline)
-        .fontWeight(.medium)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+    HStack(spacing: 8) {
+      Button {
+        openWindow(id: "dashboard")
+      } label: {
+        Text("Open Dashboard")
+          .font(.subheadline)
+          .fontWeight(.medium)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 4)
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.small)
+
+      Button {
+        NSApplication.shared.terminate(nil)
+      } label: {
+        Image(systemName: "power")
+          .font(.subheadline)
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      .accessibilityLabel("Quit")
     }
-    .buttonStyle(.borderedProminent)
-    .controlSize(.small)
   }
 
   // MARK: - Data Helpers
