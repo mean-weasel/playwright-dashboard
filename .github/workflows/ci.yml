@@ -41,7 +41,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -66,7 +66,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install swift-format
         run: brew install swift-format
       - name: Lint
@@ -82,7 +82,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Build (warnings as errors)
@@ -94,7 +94,7 @@ jobs:
           if grep -q "error:" build.log; then exit 1; fi
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-log
           path: PlaywrightDashboard/build.log
@@ -110,7 +110,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Run tests
@@ -130,7 +130,7 @@ jobs:
           fi
       - name: Upload test log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-log
           path: PlaywrightDashboard/test.log
@@ -146,7 +146,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Run tests with coverage
@@ -155,7 +155,7 @@ jobs:
           swift test --enable-code-coverage
           echo "CODECOV_PATH=$(swift test --show-codecov-path)" >> "$GITHUB_ENV"
       - name: Upload coverage JSON
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-dashboard-coverage
           path: ${{ env.CODECOV_PATH }}
@@ -171,7 +171,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check file sizes (max 300 lines)
         run: |
           OVERSIZED=$(find PlaywrightDashboard/Sources -name '*.swift' -exec awk 'END { if (NR > 300) print FILENAME ": " NR " lines" }' {} \;)
@@ -191,7 +191,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate mockup files
         run: make mockups
 
@@ -205,13 +205,13 @@ jobs:
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.code == 'true')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Build app bundle
         run: make validate-package
       - name: Upload app zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PlaywrightDashboard
           path: dist/PlaywrightDashboard.zip
@@ -226,7 +226,7 @@ jobs:
       always() && !cancelled() &&
       needs.package-check.result == 'success'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Run structural UI smoke
@@ -243,7 +243,7 @@ jobs:
           fi
       - name: Upload structural smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-structure-smoke
           path: |
@@ -263,7 +263,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' &&
         (inputs.gui_smoke_mode == 'live' || inputs.gui_smoke_mode == 'both')))
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Check Chrome
@@ -279,7 +279,7 @@ jobs:
         run: make smoke-expanded-interaction
       - name: Upload live smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gui-smoke-live-artifacts
           path: |
@@ -299,7 +299,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' &&
         (inputs.gui_smoke_mode == 'fallback' || inputs.gui_smoke_mode == 'both')))
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Check Chrome
@@ -315,7 +315,7 @@ jobs:
         run: make smoke-expanded-fallback
       - name: Upload fallback smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gui-smoke-fallback-artifacts
           path: |
@@ -333,7 +333,7 @@ jobs:
       needs.package-check.result == 'success' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
       - name: Capture visual snapshots
@@ -353,7 +353,7 @@ jobs:
           fi
       - name: Upload visual snapshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: visual-snapshots
           path: |
