@@ -7,6 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  isAccessibilityDenied,
+  runAccessibilityPreflight,
+  staticAccessibilityHelp,
+} from "./visual-snapshot/accessibility.mjs";
+
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const appPath = path.join(repoRoot, "dist", "PlaywrightDashboard.app");
@@ -16,6 +22,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR
 const forceSnapshotFallback = process.env.SMOKE_FORCE_SNAPSHOT_FALLBACK === "1";
 const sessionName = `smoke-interaction-${process.pid}`;
 const displayName = "Smoke Interaction";
+await runGuiPreflight();
 const tmpRoot = await fsTempDir("playwright-dashboard-expanded-smoke-");
 const firstSurfaceShot = path.join(tmpRoot, "surface-before.png");
 const secondSurfaceShot = path.join(tmpRoot, "surface-after.png");
@@ -33,14 +40,7 @@ let chromeProcess;
 let appOpened = false;
 let server;
 const events = [];
-const accessibilityHelp = [
-  "macOS denied assistive access for the process running this smoke test.",
-  "Grant Accessibility access to every process identity in the launch chain: terminal/editor, Node.js, osascript, and any wrapper/helper.",
-  `Node.js binary: ${process.execPath}`,
-  "osascript binary: /usr/bin/osascript",
-  "System Settings > Privacy & Security > Accessibility",
-  "After changing Accessibility settings, quit and reopen the terminal/editor before rerunning QA.",
-].join("\n");
+const accessibilityHelp = staticAccessibilityHelp();
 
 try {
   // Kill any leftover instance so `open --args` delivers fresh launch arguments.
@@ -218,6 +218,9 @@ function parseUIScriptResult(output) {
       throw new Error(`Invalid UI script result, missing ${key}: ${output}`);
     }
   }
+  if (values.initialW < 120 || values.initialH < 80) {
+    throw new Error(`Expanded screenshot surface is unexpectedly small: ${output}`);
+  }
   values.initialRect = {
     x: values.initialX - Math.floor(values.initialW / 2),
     y: values.initialY - Math.floor(values.initialH / 2),
@@ -236,6 +239,14 @@ function parseResizeScriptResult(output) {
       .filter(([key, value]) => key && value)
       .map(([key, value]) => [key, Number(value)]),
   );
+  for (const key of ["x", "y", "w", "h"]) {
+    if (!Number.isFinite(values[key])) {
+      throw new Error(`Invalid resize script result, missing ${key}: ${output}`);
+    }
+  }
+  if (values.w < 120 || values.h < 80) {
+    throw new Error(`Resized expanded screenshot surface is unexpectedly small: ${output}`);
+  }
   if (!Number.isFinite(values.x) || !Number.isFinite(values.y)) {
     throw new Error(`Invalid resize script result: ${output}`);
   }
@@ -266,6 +277,15 @@ function captureRect(rect, outputPath) {
 async function fsTempDir(prefix) {
   const { mkdtemp } = await import("node:fs/promises");
   return mkdtemp(path.join(os.tmpdir(), prefix));
+}
+
+async function runGuiPreflight() {
+  try {
+    await runAccessibilityPreflight({ quiet: true });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
 
 async function createSessionFile(debugPort) {
@@ -413,6 +433,32 @@ on waitForNamedElement(processName, elementName, maxAttempts)
   error "Timed out waiting for " & elementName
 end waitForNamedElement
 
+on waitForFirstNamedElement(processName, firstElementName, secondElementName, maxAttempts)
+  repeat with attempt from 1 to maxAttempts
+    tell application "System Events"
+      tell process processName
+        if (count of windows) > 0 then
+          set allItems to entire contents of window 1
+        else
+          set allItems to UI elements
+        end if
+        repeat with itemRef in allItems
+          try
+            set itemName to name of itemRef as string
+            if itemName is firstElementName or itemName is secondElementName then return itemRef
+          end try
+          try
+            set itemIdentifier to value of attribute "AXIdentifier" of itemRef as string
+            if itemIdentifier is firstElementName or itemIdentifier is secondElementName then return itemRef
+          end try
+        end repeat
+      end tell
+    end tell
+    delay 0.5
+  end repeat
+  error "Timed out waiting for " & firstElementName & " or " & secondElementName
+end waitForFirstNamedElement
+
 on waitForNamedElementValue(processName, elementName, expectedValue, maxAttempts)
   repeat with attempt from 1 to maxAttempts
     tell application "System Events"
@@ -438,9 +484,15 @@ set appName to "PlaywrightDashboard"
 if not waitForProcess(appName, 30) then error "PlaywrightDashboard process did not launch"
 
 set refreshBadge to waitForNamedElement(appName, expectedRefreshBadge, 80)
+set saveButton to waitForNamedElement(appName, "expanded-save-screenshot", 80)
+set urlButton to waitForNamedElement(appName, "expanded-open-current-url", 80)
+set inspectorButton to waitForNamedElement(appName, "expanded-open-cdp-inspector", 80)
+set metadataButton to waitForNamedElement(appName, "expanded-metadata-toggle", 80)
 
-set interactionButton to waitForNamedElement(appName, "expanded-interaction-toggle", 80)
+set interactionMode to waitForNamedElement(appName, "expanded-interaction-mode", 80)
+set interactionButton to waitForFirstNamedElement(appName, "Control", "expanded-interaction-toggle", 80)
 tell application "System Events" to click interactionButton
+set interactionBadge to waitForNamedElement(appName, "Control mode", 40)
 
 set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 80)
 tell application "System Events"
@@ -497,8 +549,10 @@ tell application "System Events"
 end tell
 set resizedCenterX to (item 1 of resizedSurfacePosition) + ((item 1 of resizedSurfaceSize) / 2)
 set resizedCenterY to (item 2 of resizedSurfacePosition) + ((item 2 of resizedSurfaceSize) / 2)
+set resizedWidth to (item 1 of resizedSurfaceSize) as integer
+set resizedHeight to (item 2 of resizedSurfaceSize) as integer
 
-return "x=" & (resizedCenterX as integer) & " y=" & (resizedCenterY as integer)
+return "x=" & (resizedCenterX as integer) & " y=" & (resizedCenterY as integer) & " w=" & resizedWidth & " h=" & resizedHeight
 `;
 }
 
@@ -617,10 +671,6 @@ function run(command, args, options = {}) {
 
 function runAppleScript(script) {
   return run("osascript", ["-e", script]);
-}
-
-function isAccessibilityDenied(output) {
-  return output.includes("-25211") || output.includes("not allowed assistive access");
 }
 
 async function waitFor(predicate, label, timeoutMs = 30_000) {

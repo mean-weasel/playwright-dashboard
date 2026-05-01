@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-snapshot-baseline visual-snapshot-compare install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
@@ -12,7 +12,10 @@ DIST_DIR := dist
 PACKAGE_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 VISUAL_SNAPSHOT_BASELINE_DIR ?= $(DIST_DIR)/visual-snapshots-baseline
 VISUAL_SNAPSHOT_COMPARE_DIR ?= $(DIST_DIR)/visual-snapshots
-SWIFT_FORMAT ?= $(shell command -v swift-format 2>/dev/null || xcrun --find swift-format 2>/dev/null || echo swift-format)
+VISUAL_SNAPSHOT_DIFF_THRESHOLD ?= 0.01
+VISUAL_SNAPSHOT_PIXEL_THRESHOLD ?= 2
+SWIFT_FORMAT_TAG ?= swift-6.3.1-RELEASE
+SWIFT_FORMAT ?= scripts/swift_format_tool.sh
 
 build:
 	cd $(PKG_DIR) && swift build $(BUILD_CONFIG_FLAG)
@@ -25,10 +28,10 @@ coverage:
 	@echo "Coverage JSON: $$(cd $(PKG_DIR) && swift test --show-codecov-path)"
 
 lint:
-	$(SWIFT_FORMAT) lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	SWIFT_FORMAT_TAG=$(SWIFT_FORMAT_TAG) $(SWIFT_FORMAT) lint --recursive $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 format:
-	$(SWIFT_FORMAT) format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
+	SWIFT_FORMAT_TAG=$(SWIFT_FORMAT_TAG) $(SWIFT_FORMAT) format --recursive --in-place $(PKG_DIR)/Sources $(PKG_DIR)/Tests
 
 file-size:
 	@OVERSIZED=$$(find $(PKG_DIR)/Sources -name '*.swift' -exec awk 'END { if (NR > 300) print FILENAME ": " NR " lines" }' {} \;); \
@@ -125,11 +128,13 @@ validate-package: package
 check-accessibility:
 	scripts/check_accessibility.mjs
 
-smoke-app: check-accessibility validate-package
+smoke-app:
 	@if [ "$$RUN_GUI_SMOKE" != "1" ]; then \
 		echo "Set RUN_GUI_SMOKE=1 to launch the macOS app smoke test"; \
 		exit 2; \
 	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	open $(PACKAGE_BUNDLE)
 	osascript scripts/smoke_app.applescript
 
@@ -154,29 +159,58 @@ smoke-live-cdp:
 		RUN_LIVE_CDP_INTERACTION_SMOKE=$${RUN_LIVE_CDP_INTERACTION_SMOKE:-0} \
 		swift test --filter CDPClientLiveSmokeTests
 
-smoke-expanded-interaction: validate-package
+smoke-expanded-interaction:
 	@if [ "$$RUN_EXPANDED_INTERACTION_SMOKE" != "1" ]; then \
 		echo "Set RUN_EXPANDED_INTERACTION_SMOKE=1 to drive the expanded-session interaction smoke test"; \
 		exit 2; \
 	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	scripts/smoke_expanded_interaction.mjs
 
-smoke-expanded-fallback: validate-package
+smoke-expanded-fallback:
 	@if [ "$$RUN_EXPANDED_FALLBACK_SMOKE" != "1" ]; then \
 		echo "Set RUN_EXPANDED_FALLBACK_SMOKE=1 to drive the expanded-session fallback smoke test"; \
 		exit 2; \
 	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
 
-visual-snapshots: validate-package
+visual-snapshots:
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	scripts/snapshot_visual_states.mjs
 
-visual-snapshot-baseline: validate-package
+visual-structure-smoke:
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
+	VISUAL_SNAPSHOT_STRUCTURE_ONLY=1 \
+		VISUAL_SNAPSHOT_CASES=empty-dashboard,populated-dashboard,settings,closed-history \
+		VISUAL_SNAPSHOT_DIR=$(DIST_DIR)/visual-structure-smoke \
+		scripts/snapshot_visual_states.mjs
+
+visual-snapshot-baseline:
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	VISUAL_SNAPSHOT_DIR=$(VISUAL_SNAPSHOT_BASELINE_DIR) scripts/snapshot_visual_states.mjs
 
-visual-snapshot-compare: validate-package
+visual-snapshot-compare:
 	test -d $(VISUAL_SNAPSHOT_BASELINE_DIR)
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
 	VISUAL_SNAPSHOT_BASELINE_DIR=$(VISUAL_SNAPSHOT_BASELINE_DIR) \
+		VISUAL_SNAPSHOT_DIR=$(VISUAL_SNAPSHOT_COMPARE_DIR) \
+		scripts/snapshot_visual_states.mjs
+
+visual-snapshot-enforce:
+	test -d $(VISUAL_SNAPSHOT_BASELINE_DIR)
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
+	VISUAL_SNAPSHOT_ENFORCE_DIFFS=1 \
+		VISUAL_SNAPSHOT_DIFF_THRESHOLD=$(VISUAL_SNAPSHOT_DIFF_THRESHOLD) \
+		VISUAL_SNAPSHOT_PIXEL_THRESHOLD=$(VISUAL_SNAPSHOT_PIXEL_THRESHOLD) \
+		VISUAL_SNAPSHOT_BASELINE_DIR=$(VISUAL_SNAPSHOT_BASELINE_DIR) \
 		VISUAL_SNAPSHOT_DIR=$(VISUAL_SNAPSHOT_COMPARE_DIR) \
 		scripts/snapshot_visual_states.mjs
 

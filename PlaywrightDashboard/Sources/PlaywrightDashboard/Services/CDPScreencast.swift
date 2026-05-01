@@ -6,6 +6,24 @@ extension CDPClient {
     let sessionId: Int
     let url: String?
     let title: String?
+    let targetId: String?
+    let pageTargets: [CDPPageTarget]
+
+    init(
+      jpeg: Data,
+      sessionId: Int,
+      url: String?,
+      title: String?,
+      targetId: String? = nil,
+      pageTargets: [CDPPageTarget] = []
+    ) {
+      self.jpeg = jpeg
+      self.sessionId = sessionId
+      self.url = url
+      self.title = title
+      self.targetId = targetId
+      self.pageTargets = pageTargets
+    }
   }
 
   func screencastFrames(
@@ -65,9 +83,13 @@ extension CDPClient {
     continuation: AsyncThrowingStream<ScreencastFrame, Error>.Continuation
   ) async throws {
     let pages = try await listPages()
+    let pageTargets = CDPPageTargetSelection.selectableTargets(from: pages)
     guard
-      let page = Self.pageForScreenshot(from: pages),
-      let wsURLString = page.webSocketDebuggerUrl,
+      let pageTarget = CDPPageTargetSelection.selectedTarget(
+        from: pageTargets,
+        preferredTargetId: nil
+      ),
+      let wsURLString = pageTarget.webSocketDebuggerUrl,
       let wsURL = URL(string: wsURLString)
     else {
       throw CDPError.noPages
@@ -96,8 +118,10 @@ extension CDPClient {
             ScreencastFrame(
               jpeg: frame.jpeg,
               sessionId: frame.sessionId,
-              url: page.url,
-              title: page.title
+              url: pageTarget.url,
+              title: pageTarget.title,
+              targetId: pageTarget.id,
+              pageTargets: pageTargets
             )
           )
           try await acknowledgeScreencastFrame(frame.sessionId, on: ws)

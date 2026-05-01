@@ -9,6 +9,8 @@ private let logger = Logger(subsystem: "PlaywrightDashboard", category: "Screens
 @Observable
 @MainActor
 final class ScreenshotService {
+  typealias StaleThresholdProvider = @MainActor () -> TimeInterval
+
   /// Interval between capture cycles.
   private var interval: Duration {
     DashboardSettings.thumbnailRefreshDuration()
@@ -16,10 +18,22 @@ final class ScreenshotService {
   /// How long since last activity before marking a session stale.
   /// 0 means stale detection is disabled ("Never").
   private var staleThreshold: TimeInterval {
-    TimeInterval(UserDefaults.standard.integer(forKey: "staleThresholdSeconds"))
+    staleThresholdProvider()
   }
   private var task: Task<Void, Never>?
-  private var clients: [Int: CDPClient] = [:]
+  private var clients: [Int: any ScreenshotCapturing] = [:]
+  private let clientFactory: @MainActor (Int) -> any ScreenshotCapturing
+  private let staleThresholdProvider: StaleThresholdProvider
+
+  init(
+    clientFactory: @escaping @MainActor (Int) -> any ScreenshotCapturing = { CDPClient(port: $0) },
+    staleThresholdProvider: @escaping StaleThresholdProvider = {
+      TimeInterval(UserDefaults.standard.integer(forKey: "staleThresholdSeconds"))
+    }
+  ) {
+    self.clientFactory = clientFactory
+    self.staleThresholdProvider = staleThresholdProvider
+  }
 
   /// Start periodic screenshot capture.
   func start(appState: AppState) {
@@ -44,19 +58,19 @@ final class ScreenshotService {
 
   // MARK: - Private
 
-  private func captureAll(appState: AppState) async {
+  func captureAll(appState: AppState) async {
     let sessions = appState.sessions
     let selectedSessionId = appState.selectedSessionId
 
     // Gather targets on the main actor, skipping the session displayed in expanded view
     // (its dedicated fast-refresh loop handles captures to avoid dual-writer conflicts)
-    let targets: [(sessionId: String, port: Int)] =
+    let targets: [(sessionId: String, port: Int, targetId: String?)] =
       sessions
       .filter {
         $0.cdpPort > 0 && $0.status != .closed && $0.status != .closing
           && $0.sessionId != selectedSessionId
       }
-      .map { ($0.sessionId, $0.cdpPort) }
+      .map { ($0.sessionId, $0.cdpPort, $0.selectedTargetId) }
 
     // Capture screenshots concurrently off the main actor
     let results = await withTaskGroup(
@@ -67,7 +81,8 @@ final class ScreenshotService {
         group.addTask {
           do {
             let result = try await client.captureScreenshot(
-              quality: DashboardSettings.thumbnailQuality())
+              quality: DashboardSettings.thumbnailQuality(),
+              targetId: target.targetId)
             return (target.sessionId, result)
           } catch is CancellationError {
             return (target.sessionId, nil)
@@ -111,11 +126,11 @@ final class ScreenshotService {
     }
   }
 
-  private func getClient(for port: Int) -> CDPClient {
+  private func getClient(for port: Int) -> any ScreenshotCapturing {
     if let existing = clients[port] {
       return existing
     }
-    let client = CDPClient(port: port)
+    let client = clientFactory(port)
     clients[port] = client
     return client
   }
@@ -125,3 +140,9 @@ final class ScreenshotService {
     session.markStaleIfInactive(threshold: staleThreshold)
   }
 }
+
+protocol ScreenshotCapturing: Sendable {
+  func captureScreenshot(quality: Int, targetId: String?) async throws -> CDPClient.ScreenshotResult
+}
+
+extension CDPClient: ScreenshotCapturing {}

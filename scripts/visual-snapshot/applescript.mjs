@@ -29,6 +29,41 @@ if not waitForElement(appName, "${expectedElement}", 80) then error "Timed out w
 `;
 }
 
+export function structuralSnapshotScript() {
+  return `
+set appName to "PlaywrightDashboard"
+set output to ""
+tell application "System Events"
+  if not (exists process appName) then return "windowCount=0" & linefeed
+  tell process appName
+    set output to output & "windowCount=" & (count of windows) & linefeed
+    if (count of windows) > 0 then
+      set allItems to entire contents of window 1
+      set output to output & "itemCount=" & (count of allItems) & linefeed
+      repeat with itemRef in allItems
+        set roleText to ""
+        set nameText to ""
+        set idText to ""
+        try
+          set roleText to role of itemRef as string
+        end try
+        try
+          set nameText to name of itemRef as string
+        end try
+        try
+          set idText to value of attribute "AXIdentifier" of itemRef as string
+        end try
+        if roleText is not "" or nameText is not "" or idText is not "" then
+          set output to output & "item" & tab & roleText & tab & nameText & tab & idText & linefeed
+        end if
+      end repeat
+    end if
+  end tell
+end tell
+return output
+`;
+}
+
 export function waitForAppWindowScript() {
   return `
 set appName to "PlaywrightDashboard"

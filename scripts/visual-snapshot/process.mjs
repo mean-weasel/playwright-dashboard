@@ -4,14 +4,9 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-const accessibilityHelp = [
-  "macOS denied assistive access for the process running this script.",
-  "Grant Accessibility access to every process identity in the launch chain: terminal/editor, Node.js, osascript, and any wrapper/helper.",
-  `Node.js binary: ${process.execPath}`,
-  "osascript binary: /usr/bin/osascript",
-  "System Settings > Privacy & Security > Accessibility",
-  "After changing Accessibility settings, quit and reopen the terminal/editor before rerunning QA.",
-].join("\n");
+import { isAccessibilityDenied, staticAccessibilityHelp } from "./accessibility.mjs";
+
+const accessibilityHelp = staticAccessibilityHelp();
 
 export function run(command, args) {
   return new Promise((resolve, reject) => {
@@ -27,10 +22,6 @@ export function run(command, args) {
       resolve(stdout.trim());
     });
   });
-}
-
-function isAccessibilityDenied(output) {
-  return output.includes("-25211") || output.includes("not allowed assistive access");
 }
 
 export function runAppleScript(source) {

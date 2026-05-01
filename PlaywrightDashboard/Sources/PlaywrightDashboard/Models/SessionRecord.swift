@@ -18,6 +18,8 @@ final class SessionRecord {
   var lastScreenshot: Data?  // JPEG of last known state
   var lastURL: String?
   var lastTitle: String?
+  var pageTargetsData: Data?
+  var selectedTargetId: String?
   var createdAt: Date
   var closedAt: Date?  // nil if still open
   var lastActivityAt: Date  // for stale detection
@@ -34,6 +36,8 @@ final class SessionRecord {
     lastScreenshot: Data? = nil,
     lastURL: String? = nil,
     lastTitle: String? = nil,
+    pageTargets: [CDPPageTarget] = [],
+    selectedTargetId: String? = nil,
     createdAt: Date = Date(),
     closedAt: Date? = nil,
     lastActivityAt: Date = Date()
@@ -51,6 +55,8 @@ final class SessionRecord {
     self.lastScreenshot = lastScreenshot
     self.lastURL = lastURL
     self.lastTitle = lastTitle
+    self.pageTargetsData = Self.encodePageTargets(pageTargets)
+    self.selectedTargetId = selectedTargetId
     self.createdAt = createdAt
     self.closedAt = closedAt
     self.lastActivityAt = lastActivityAt
@@ -73,6 +79,44 @@ final class SessionRecord {
   /// Display name shown in UI, preferring user-set custom name over auto-generated label.
   var displayName: String {
     customName ?? autoLabel
+  }
+
+  var pageTargets: [CDPPageTarget] {
+    get {
+      guard let pageTargetsData else { return [] }
+      return (try? JSONDecoder().decode([CDPPageTarget].self, from: pageTargetsData)) ?? []
+    }
+    set {
+      pageTargetsData = Self.encodePageTargets(newValue)
+      selectedTargetId = CDPPageTargetSelection.resolvedSelectedTargetId(
+        currentSelectedTargetId: selectedTargetId,
+        targets: newValue
+      )
+    }
+  }
+
+  var selectedPageTarget: CDPPageTarget? {
+    CDPPageTargetSelection.selectedTarget(
+      from: pageTargets,
+      preferredTargetId: selectedTargetId
+    )
+  }
+
+  func selectPageTarget(id: String?) {
+    selectedTargetId = CDPPageTargetSelection.resolvedSelectedTargetId(
+      currentSelectedTargetId: id,
+      targets: pageTargets
+    )
+  }
+
+  @discardableResult
+  func updatePageTargets(_ targets: [CDPPageTarget]) -> Bool {
+    let previousTargets = pageTargets
+    let previousSelectedTargetId = selectedTargetId
+
+    pageTargets = targets
+
+    return previousTargets != pageTargets || previousSelectedTargetId != selectedTargetId
   }
 
   /// Whether the user explicitly closed this session (vs. auto-closed by sync when file disappeared).
@@ -116,6 +160,12 @@ final class SessionRecord {
     lastScreenshot = result.jpeg
     lastURL = result.url
     lastTitle = result.title
+    if !result.pageTargets.isEmpty {
+      pageTargets = result.pageTargets
+    }
+    if let targetId = result.targetId {
+      selectedTargetId = targetId
+    }
     if didChangeContent {
       lastActivityAt = Date()
     }
@@ -156,5 +206,10 @@ final class SessionRecord {
       }
     }
     return URL(fileURLWithPath: path).lastPathComponent
+  }
+
+  private static func encodePageTargets(_ targets: [CDPPageTarget]) -> Data? {
+    guard !targets.isEmpty else { return nil }
+    return try? JSONEncoder().encode(targets)
   }
 }

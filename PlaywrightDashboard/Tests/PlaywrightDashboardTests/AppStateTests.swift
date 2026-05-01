@@ -463,8 +463,48 @@ struct AppStateTests {
     #expect(appState.lastOpenURLError == "Only HTTP and HTTPS URLs can be opened.")
   }
 
-  @Test("openCDPInspector opens localhost inspector URL")
-  func openCDPInspectorOpensURL() {
+  @Test("openCDPInspector opens selected target inspector URL")
+  func openCDPInspectorOpensSelectedTargetURL() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    let targets = [
+      CDPPageTarget(
+        id: "page-1",
+        type: "page",
+        url: "https://example.com/one",
+        title: "One",
+        webSocketDebuggerUrl: "ws://localhost:9333/devtools/page/page-1"
+      ),
+      CDPPageTarget(
+        id: "page-2",
+        type: "page",
+        url: "https://example.com/two",
+        title: "Two",
+        webSocketDebuggerUrl: "ws://localhost:9333/devtools/page/page-2"
+      ),
+    ]
+    let session = SessionRecord(
+      sessionId: "cdp",
+      autoLabel: "CDP",
+      workspaceDir: "/tmp/cdp",
+      cdpPort: 9333,
+      socketPath: "/tmp/cdp.sock",
+      pageTargets: targets,
+      selectedTargetId: "page-2"
+    )
+
+    #expect(appState.openCDPInspector(session))
+    #expect(
+      opener.urls.map(\.absoluteString) == [
+        "http://localhost:9333/devtools/inspector.html?ws=localhost:9333/devtools/page/page-2"
+      ])
+  }
+
+  @Test("openCDPInspector falls back to port URL when selected target has no id")
+  func openCDPInspectorFallsBackToPortURL() {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -475,7 +515,16 @@ struct AppStateTests {
       autoLabel: "CDP",
       workspaceDir: "/tmp/cdp",
       cdpPort: 9333,
-      socketPath: "/tmp/cdp.sock"
+      socketPath: "/tmp/cdp.sock",
+      pageTargets: [
+        CDPPageTarget(
+          id: " ",
+          type: "page",
+          url: "https://example.com",
+          title: "Example",
+          webSocketDebuggerUrl: "ws://localhost:9333/devtools/page/blank"
+        )
+      ]
     )
 
     #expect(appState.openCDPInspector(session))
@@ -506,6 +555,94 @@ struct AppStateTests {
     #expect(appState.lastOpenURLError == nil)
   }
 
+  @Test("refreshTargets preserves valid selected target and saves changed list")
+  func refreshTargetsPreservesValidSelection() {
+    let saveCounter = SaveCounter()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      modelContextSaver: { _ in saveCounter.count += 1 }
+    )
+    let session = SessionRecord(
+      sessionId: "targets",
+      autoLabel: "Targets",
+      workspaceDir: "/tmp/targets",
+      cdpPort: 9222,
+      socketPath: "/tmp/targets.sock",
+      pageTargets: [
+        makePageTarget(id: "first", url: "http://localhost:3000", title: "First"),
+        makePageTarget(id: "second", url: "http://localhost:3001", title: "Second"),
+      ],
+      selectedTargetId: "second"
+    )
+
+    let didChange = appState.refreshTargets(
+      session,
+      pages: [
+        makePageInfo(id: "second", url: "http://localhost:3001", title: "Second"),
+        makePageInfo(id: "third", url: "http://localhost:3002", title: "Third"),
+      ])
+
+    #expect(didChange)
+    #expect(saveCounter.count == 1)
+    #expect(session.pageTargets.map(\.id) == ["second", "third"])
+    #expect(session.selectedTargetId == "second")
+  }
+
+  @Test("refreshTargets falls back when selected target disappears")
+  func refreshTargetsFallsBackWhenSelectionDisappears() {
+    let appState = AppState(sessionFileProvider: { [] })
+    let session = SessionRecord(
+      sessionId: "targets",
+      autoLabel: "Targets",
+      workspaceDir: "/tmp/targets",
+      cdpPort: 9222,
+      socketPath: "/tmp/targets.sock",
+      pageTargets: [
+        makePageTarget(id: "second", url: "http://localhost:3001", title: "Second")
+      ],
+      selectedTargetId: "second"
+    )
+
+    appState.refreshTargets(
+      session,
+      pages: [
+        makePageInfo(id: "third", url: "http://localhost:3002", title: "Third")
+      ])
+
+    #expect(session.pageTargets.map(\.id) == ["third"])
+    #expect(session.selectedTargetId == "third")
+  }
+
+  @Test("refreshTargets does not save unchanged list")
+  func refreshTargetsDoesNotSaveUnchangedList() {
+    let saveCounter = SaveCounter()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      modelContextSaver: { _ in saveCounter.count += 1 }
+    )
+    let session = SessionRecord(
+      sessionId: "targets",
+      autoLabel: "Targets",
+      workspaceDir: "/tmp/targets",
+      cdpPort: 9222,
+      socketPath: "/tmp/targets.sock",
+      pageTargets: [
+        makePageTarget(id: "first", url: "http://localhost:3000", title: "First")
+      ],
+      selectedTargetId: "first"
+    )
+
+    let didChange = appState.refreshTargets(
+      session,
+      pages: [
+        makePageInfo(id: "first", url: "http://localhost:3000", title: "First")
+      ])
+
+    #expect(!didChange)
+    #expect(saveCounter.count == 0)
+    #expect(session.selectedTargetId == "first")
+  }
+
   @Test("refreshPlaywrightCLIStatus publishes provider status")
   func refreshPlaywrightCLIStatus() async {
     let appState = AppState(
@@ -525,6 +662,11 @@ struct AppStateTests {
   private final class WatchState {
     var startCount = 0
     var stopCount = 0
+  }
+
+  @MainActor
+  private final class SaveCounter {
+    var count = 0
   }
 
   private actor CommandRecorder {
@@ -569,5 +711,30 @@ struct AppStateTests {
         return "saveFailed"
       }
     }
+  }
+
+  private func makePageInfo(
+    id: String,
+    type: String = "page",
+    url: String,
+    title: String
+  ) -> CDPClient.PageInfo {
+    CDPClient.PageInfo(
+      id: id,
+      type: type,
+      url: url,
+      title: title,
+      webSocketDebuggerUrl: "ws://localhost/devtools/page/\(id)"
+    )
+  }
+
+  private func makePageTarget(id: String, url: String, title: String) -> CDPPageTarget {
+    CDPPageTarget(
+      id: id,
+      type: "page",
+      url: url,
+      title: title,
+      webSocketDebuggerUrl: "ws://localhost/devtools/page/\(id)"
+    )
   }
 }

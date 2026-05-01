@@ -145,6 +145,211 @@ struct ScreenshotUpdateTests {
     #expect(session.lastActivityAt > oldActivity)
     #expect(session.status == .active)
   }
+
+  @Test("screenshot update retains page targets and selected target")
+  func screenshotUpdateRetainsPageTargetsAndSelection() {
+    let targets = [
+      CDPPageTarget(
+        id: "first",
+        type: "page",
+        url: "http://localhost:3000",
+        title: "First",
+        webSocketDebuggerUrl: "ws://localhost/devtools/page/first"
+      ),
+      CDPPageTarget(
+        id: "second",
+        type: "page",
+        url: "http://localhost:3001",
+        title: "Second",
+        webSocketDebuggerUrl: "ws://localhost/devtools/page/second"
+      ),
+    ]
+    let session = SessionRecord(
+      sessionId: "active-session",
+      autoLabel: "Active",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock"
+    )
+
+    session.updateFromScreenshot(
+      CDPClient.ScreenshotResult(
+        jpeg: Data([0x01]),
+        url: targets[1].url,
+        title: targets[1].title,
+        targetId: targets[1].id,
+        pageTargets: targets
+      )
+    )
+
+    #expect(session.pageTargets == targets)
+    #expect(session.selectedTargetId == "second")
+    #expect(session.selectedPageTarget?.title == "Second")
+  }
+
+  @Test("screencast frame without target list does not clear refreshed targets")
+  func screencastFrameWithoutTargetsDoesNotClearRefreshedTargets() {
+    let targets = [
+      CDPPageTarget(
+        id: "app",
+        type: "page",
+        url: "http://localhost:3000",
+        title: "App",
+        webSocketDebuggerUrl: "ws://localhost/devtools/page/app"
+      )
+    ]
+    let session = SessionRecord(
+      sessionId: "active-session",
+      autoLabel: "Active",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      pageTargets: targets,
+      selectedTargetId: "app"
+    )
+
+    session.updateFromScreenshot(
+      CDPClient.ScreenshotResult(
+        jpeg: Data([0x01]),
+        url: "http://localhost:3000",
+        title: "App",
+        targetId: "app"
+      )
+    )
+
+    #expect(session.pageTargets == targets)
+    #expect(session.selectedTargetId == "app")
+  }
+}
+
+@Suite("CDPPageTarget")
+struct CDPPageTargetTests {
+  @Test("devToolsFrontendURL builds target-specific inspector URL")
+  func devToolsFrontendURLBuildsTargetSpecificURL() {
+    let target = CDPPageTarget(
+      id: "page-1",
+      type: "page",
+      url: "https://example.com",
+      title: "Example",
+      webSocketDebuggerUrl: "ws://localhost:9333/devtools/page/page-1"
+    )
+
+    #expect(
+      target.devToolsFrontendURL(port: 9333)?.absoluteString
+        == "http://localhost:9333/devtools/inspector.html?ws=localhost:9333/devtools/page/page-1"
+    )
+  }
+
+  @Test("devToolsFrontendURL returns nil without usable target id")
+  func devToolsFrontendURLReturnsNilWithoutUsableTargetId() {
+    let target = CDPPageTarget(
+      id: " ",
+      type: "page",
+      url: "https://example.com",
+      title: "Example",
+      webSocketDebuggerUrl: "ws://localhost:9333/devtools/page/blank"
+    )
+
+    #expect(target.devToolsFrontendURL(port: 9333) == nil)
+    #expect(target.devToolsFrontendURL(port: 0) == nil)
+  }
+}
+
+@Suite("SessionRecord target selection")
+struct SessionRecordTargetSelectionTests {
+  @Test("selectPageTarget preserves valid choice")
+  func selectPageTargetPreservesValidChoice() {
+    let session = makeSession()
+    session.pageTargets = makeTargets()
+
+    session.selectPageTarget(id: "second")
+
+    #expect(session.selectedTargetId == "second")
+    #expect(session.selectedPageTarget?.id == "second")
+  }
+
+  @Test("selectPageTarget falls back when requested target is missing")
+  func selectPageTargetFallsBackWhenRequestedTargetIsMissing() {
+    let session = makeSession()
+    session.pageTargets = makeTargets()
+
+    session.selectPageTarget(id: "missing")
+
+    #expect(session.selectedTargetId == "first")
+    #expect(session.selectedPageTarget?.id == "first")
+  }
+
+  @Test("page target refresh keeps existing selection when target remains")
+  func pageTargetRefreshKeepsExistingSelection() {
+    let session = makeSession()
+    session.pageTargets = makeTargets()
+    session.selectPageTarget(id: "second")
+
+    session.pageTargets = [
+      makeTarget(id: "second", url: "http://localhost:3001", title: "Second"),
+      makeTarget(id: "third", url: "http://localhost:3002", title: "Third"),
+    ]
+
+    #expect(session.selectedTargetId == "second")
+  }
+
+  @Test("page target refresh falls back when selected target disappears")
+  func pageTargetRefreshFallsBackWhenSelectedTargetDisappears() {
+    let session = makeSession()
+    session.pageTargets = makeTargets()
+    session.selectPageTarget(id: "second")
+
+    session.pageTargets = [
+      makeTarget(id: "third", url: "http://localhost:3002", title: "Third")
+    ]
+
+    #expect(session.selectedTargetId == "third")
+  }
+
+  @Test("updatePageTargets reports whether targets or selection changed")
+  func updatePageTargetsReportsChanges() {
+    let session = makeSession()
+
+    #expect(session.updatePageTargets(makeTargets()))
+    #expect(!session.updatePageTargets(makeTargets()))
+
+    session.selectPageTarget(id: "second")
+
+    #expect(
+      session.updatePageTargets([
+        makeTarget(id: "third", url: "http://localhost:3002", title: "Third")
+      ])
+    )
+    #expect(session.selectedTargetId == "third")
+  }
+
+  private func makeSession() -> SessionRecord {
+    SessionRecord(
+      sessionId: UUID().uuidString,
+      autoLabel: "Session",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock"
+    )
+  }
+
+  private func makeTargets() -> [CDPPageTarget] {
+    [
+      makeTarget(id: "blank", url: "about:blank", title: ""),
+      makeTarget(id: "first", url: "http://localhost:3000", title: "First"),
+      makeTarget(id: "second", url: "http://localhost:3001", title: "Second"),
+    ]
+  }
+
+  private func makeTarget(id: String, url: String, title: String) -> CDPPageTarget {
+    CDPPageTarget(
+      id: id,
+      type: "page",
+      url: url,
+      title: title,
+      webSocketDebuggerUrl: "ws://localhost/devtools/page/\(id)"
+    )
+  }
 }
 
 @Suite("SessionRecord.markStaleIfInactive")
