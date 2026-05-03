@@ -13,7 +13,13 @@ extension ExpandedSessionView {
     isSnapshotFallback = false
     frameMode = .waiting
     lastCDPError = nil
-    frameCountSinceSave = 0
+    currentFrameImage = nil
+    currentFrameResult = nil
+    framesSinceLastPersist = 0
+    hasPersistedScreencastFrame = false
+    showsAgentActivityWarning = false
+    agentActivityDismissTask?.cancel()
+    agentActivityDismissTask = nil
 
     if DashboardSettings.forceExpandedSnapshotFallback() {
       isSnapshotFallback = true
@@ -29,12 +35,24 @@ extension ExpandedSessionView {
         guard !Task.isCancelled, session.status != .closed else { break }
         applyScreencastFrame(frame)
       }
+      persistLatestScreencastFrameIfNeeded()
+      if isRecording {
+        stopRecording()
+      }
       await connection.close()
       pageConnection = nil
     } catch is CancellationError {
+      persistLatestScreencastFrameIfNeeded()
+      if isRecording {
+        stopRecording()
+      }
       await connection.close()
       pageConnection = nil
     } catch {
+      persistLatestScreencastFrameIfNeeded()
+      if isRecording {
+        stopRecording()
+      }
       await connection.close()
       pageConnection = nil
       isScreencasting = false
@@ -55,20 +73,40 @@ extension ExpandedSessionView {
       url: frame.url,
       title: frame.title
     )
-    session.updateFromScreenshot(result)
+    let previousResult = currentFrameResult
+    detectAgentActivityIfNeeded(previous: previousResult, new: result)
+    currentFrameResult = result
+    if let image = NSImage(data: frame.jpeg) {
+      currentFrameImage = image
+    }
     isScreencasting = true
     isSnapshotFallback = false
     frameMode = .liveScreencast
     lastCDPError = nil
     consecutiveFailures = 0
-    frameCountSinceSave += 1
+    framesSinceLastPersist += 1
+    appendRecordingFrame(frame)
 
     // Persist occasional frames so Save Screenshot and history stay recent
-    // without writing SwiftData on every screencast frame.
-    if frameCountSinceSave >= 30 {
-      frameCountSinceSave = 0
-      appState.saveSessionChanges()
+    // without routing live rendering through SwiftData on every frame.
+    if ExpandedFramePersistencePolicy.shouldPersist(
+      hasPersistedFrame: hasPersistedScreencastFrame,
+      framesSinceLastPersist: framesSinceLastPersist
+    ) {
+      persistScreencastFrame(result)
     }
+  }
+
+  private func persistLatestScreencastFrameIfNeeded() {
+    guard framesSinceLastPersist > 0, let currentFrameResult else { return }
+    persistScreencastFrame(currentFrameResult)
+  }
+
+  private func persistScreencastFrame(_ result: CDPClient.ScreenshotResult) {
+    session.updateFromScreenshot(result)
+    appState.saveSessionChanges()
+    framesSinceLastPersist = 0
+    hasPersistedScreencastFrame = true
   }
 
   private func fastRefreshLoop(client: CDPClient) async {
@@ -83,6 +121,12 @@ extension ExpandedSessionView {
           quality: DashboardSettings.expandedQuality(),
           targetId: session.selectedTargetId)
         guard session.status != .closed else { break }
+        let previousResult = currentFrameResult
+        detectAgentActivityIfNeeded(previous: previousResult, new: result)
+        currentFrameResult = result
+        if let image = NSImage(data: result.jpeg) {
+          currentFrameImage = image
+        }
         session.updateFromScreenshot(result)
         appState.saveSessionChanges()
         frameMode = .snapshotFallback

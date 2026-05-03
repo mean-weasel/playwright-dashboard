@@ -9,6 +9,7 @@ struct SmokeLaunchArguments {
   let dashboardFilter: SidebarFilter?
   let daemonDirectory: URL?
   let selectedSessionId: String?
+  let recordingExportResultURL: URL?
 
   init(arguments: [String]) {
     self.usesInMemoryStore = arguments.contains("--smoke-in-memory-store")
@@ -22,6 +23,8 @@ struct SmokeLaunchArguments {
       named: "--smoke-daemon-dir", arguments: arguments)
     self.selectedSessionId = Self.stringArgument(
       named: "--smoke-session-id", arguments: arguments)
+    self.recordingExportResultURL = Self.fileURLArgument(
+      named: "--smoke-recording-export-result", arguments: arguments)
   }
 
   private static func stringArgument(named flag: String, arguments: [String]) -> String? {
@@ -37,5 +40,10 @@ struct SmokeLaunchArguments {
   private static func urlArgument(named flag: String, arguments: [String]) -> URL? {
     guard let value = stringArgument(named: flag, arguments: arguments) else { return nil }
     return URL(fileURLWithPath: value, isDirectory: true)
+  }
+
+  private static func fileURLArgument(named flag: String, arguments: [String]) -> URL? {
+    guard let value = stringArgument(named: flag, arguments: arguments) else { return nil }
+    return URL(fileURLWithPath: value, isDirectory: false)
   }
 }

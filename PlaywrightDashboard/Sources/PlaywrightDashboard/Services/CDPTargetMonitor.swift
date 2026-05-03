@@ -96,9 +96,7 @@ actor CDPTargetMonitor {
   private func receiveWebSocketMessage(
     from webSocket: URLSessionWebSocketTask
   ) async throws -> URLSessionWebSocketTask.Message {
-    try await withTimeout {
-      try await webSocket.receive()
-    }
+    try await webSocket.receive()
   }
 
   private func withTimeout<T: Sendable>(

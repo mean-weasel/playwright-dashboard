@@ -120,6 +120,7 @@ Expanded-session GUI smoke tests are opt-in:
 ```sh
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
+RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 ```
 
 To keep failure artifacts:

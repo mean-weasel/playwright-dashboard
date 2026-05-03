@@ -236,6 +236,24 @@ struct CDPClientTests {
     )
   }
 
+  @Test("target monitor keeps quiet websocket open between target events")
+  func targetMonitorKeepsQuietWebSocketOpen() async throws {
+    let server = try FakeBrowserTargetServer(eventDelay: 0.25)
+    try server.start()
+    defer { server.stop() }
+
+    let monitor = CDPTargetMonitor(port: server.port, requestTimeout: .milliseconds(100))
+    var updates = await monitor.targetUpdates().makeAsyncIterator()
+
+    guard let created = try await updates.next() else {
+      Issue.record("Expected delayed target update")
+      return
+    }
+
+    #expect(created.map(\.id) == ["page-1"])
+    #expect(created.first?.title == "Fake App")
+  }
+
   @Test("mouse event params build CDP click payloads")
   func mouseEventParams() {
     let params = CDPClient.mouseEventParams(
@@ -1030,6 +1048,7 @@ struct CDPClientTests {
 
   private final class FakeBrowserTargetServer: @unchecked Sendable {
     private let socketFD: Int32
+    private let eventDelay: TimeInterval
     private let lock = NSLock()
     private let stopLock = NSLock()
     private var commands: [String] = []
@@ -1037,8 +1056,9 @@ struct CDPClientTests {
     private var acceptThread: Thread?
     private(set) var port: Int = 0
 
-    init() throws {
+    init(eventDelay: TimeInterval = 0) throws {
       signal(SIGPIPE, SIG_IGN)
+      self.eventDelay = eventDelay
       socketFD = socket(AF_INET, SOCK_STREAM, 0)
       guard socketFD >= 0 else { throw POSIXError(.EIO) }
 
@@ -1074,6 +1094,7 @@ struct CDPClientTests {
     func start() throws {
       let socketFD = socketFD
       let port = port
+      let eventDelay = eventDelay
       acceptThread = Thread { [weak self] in
         guard let self else { return }
         let versionFD = accept(socketFD, nil, nil)
@@ -1100,6 +1121,9 @@ struct CDPClientTests {
           String(data: FakeCDPServer.readWebSocketFrame(from: webSocketFD), encoding: .utf8) ?? ""
         self.record(command)
         FakeCDPServer.sendWebSocketText(#"{"id":1,"result":{}}"#, to: webSocketFD)
+        if eventDelay > 0 {
+          Thread.sleep(forTimeInterval: eventDelay)
+        }
         FakeCDPServer.sendWebSocketText(
           """
           {"method":"Target.targetCreated","params":{"targetInfo":{"targetId":"page-1","type":"page","title":"Fake App","url":"http://localhost:3000"}}}

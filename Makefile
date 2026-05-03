@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 PKG_DIR := PlaywrightDashboard
@@ -176,6 +176,14 @@ smoke-expanded-fallback:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
+
+smoke-recording-export:
+	@if [ "$$RUN_RECORDING_EXPORT_SMOKE" != "1" ]; then \
+		echo "Set RUN_RECORDING_EXPORT_SMOKE=1 to run the recording export smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) validate-package
+	scripts/smoke_recording_export.mjs
 
 visual-snapshots:
 	$(MAKE) check-accessibility

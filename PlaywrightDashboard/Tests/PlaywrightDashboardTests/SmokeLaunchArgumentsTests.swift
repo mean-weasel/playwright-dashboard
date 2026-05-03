@@ -20,6 +20,8 @@ struct SmokeLaunchArgumentsTests {
       "/tmp/playwright-dashboard-daemon",
       "--smoke-session-id",
       "visual-expanded",
+      "--smoke-recording-export-result",
+      "/tmp/playwright-dashboard-recording/result.json",
     ])
 
     #expect(arguments.usesInMemoryStore)
@@ -30,6 +32,9 @@ struct SmokeLaunchArgumentsTests {
     #expect(arguments.dashboardFilter == .closed)
     #expect(arguments.daemonDirectory?.path == "/tmp/playwright-dashboard-daemon")
     #expect(arguments.selectedSessionId == "visual-expanded")
+    #expect(
+      arguments.recordingExportResultURL?.path
+        == "/tmp/playwright-dashboard-recording/result.json")
   }
 
   @Test("uses production defaults when smoke flags are absent")
@@ -44,6 +49,7 @@ struct SmokeLaunchArgumentsTests {
     #expect(arguments.dashboardFilter == .allOpen)
     #expect(arguments.daemonDirectory == nil)
     #expect(arguments.selectedSessionId == nil)
+    #expect(arguments.recordingExportResultURL == nil)
   }
 
   @Test("ignores smoke flags that are missing values")

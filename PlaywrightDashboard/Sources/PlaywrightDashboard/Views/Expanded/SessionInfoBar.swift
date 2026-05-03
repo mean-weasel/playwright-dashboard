@@ -4,7 +4,21 @@ struct SessionInfoBar: View {
   @Environment(AppState.self) private var appState
   let session: SessionRecord
   let onBack: () -> Void
+  let onDetach: (() -> Void)?
   let onNavigate: (String) async throws -> String
+  let canRecord: Bool
+  let isRecording: Bool
+  let isFinishingRecording: Bool
+  let recordingFrameCount: Int
+  let recordingError: String?
+  let lastRecordingURL: URL?
+  let lastRecordingExportURL: URL?
+  let isExportingRecording: Bool
+  let recordingExportError: String?
+  let onToggleRecording: () -> Void
+  let onExportRecording: () -> Void
+  let onDismissRecordingError: () -> Void
+  let onDismissRecordingExportError: () -> Void
   @Binding var showMetadata: Bool
   @Binding var interactionEnabled: Bool
   let connectionSummary: ExpandedConnectionSummary
@@ -62,20 +76,32 @@ struct SessionInfoBar: View {
       connectionSummary
 
       if let error = appState.lastScreenshotSaveError {
-        warningLabel("Save failed", message: error) {
+        ExpandedWarningLabel("Save failed", message: error) {
           appState.dismissScreenshotSaveError()
         }
       }
 
       if let error = appState.lastOpenURLError {
-        warningLabel("Open failed", message: error) {
+        ExpandedWarningLabel("Open failed", message: error) {
           appState.dismissOpenURLError()
         }
       }
 
       if let error = navigationError {
-        warningLabel("Navigate failed", message: error) {
+        ExpandedWarningLabel("Navigate failed", message: error) {
           navigationError = nil
+        }
+      }
+
+      if let error = recordingError {
+        ExpandedWarningLabel("Record failed", message: error) {
+          onDismissRecordingError()
+        }
+      }
+
+      if let error = recordingExportError {
+        ExpandedWarningLabel("Export failed", message: error) {
+          onDismissRecordingExportError()
         }
       }
 
@@ -114,6 +140,42 @@ struct SessionInfoBar: View {
       .accessibilityLabel("Open CDP inspector")
       .accessibilityIdentifier("expanded-open-cdp-inspector")
       .help("Open CDP inspector")
+
+      Button(action: onToggleRecording) {
+        if isFinishingRecording {
+          ProgressView()
+            .controlSize(.small)
+            .frame(width: 14, height: 14)
+        } else {
+          Image(systemName: isRecording ? "stop.circle.fill" : "record.circle")
+            .font(.body)
+        }
+      }
+      .buttonStyle(.plain)
+      .disabled((!isRecording && !canRecord) || isFinishingRecording)
+      .accessibilityLabel(isRecording ? "Stop recording" : "Start recording")
+      .accessibilityIdentifier("expanded-recording-toggle")
+      .help(recordingHelp)
+
+      if let lastRecordingURL {
+        ExpandedRecordingControls(
+          lastRecordingURL: lastRecordingURL,
+          lastRecordingExportURL: lastRecordingExportURL,
+          isExportingRecording: isExportingRecording,
+          onExportRecording: onExportRecording
+        )
+      }
+
+      if let onDetach {
+        Button(action: onDetach) {
+          Image(systemName: "macwindow.on.rectangle")
+            .font(.body)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open detached window")
+        .accessibilityIdentifier("expanded-open-detached-window")
+        .help("Open detached window")
+      }
 
       Picker(
         "Interaction mode",
@@ -208,6 +270,16 @@ struct SessionInfoBar: View {
     navigationText = session.lastURL.flatMap { $0.isEmpty ? nil : $0 } ?? ""
   }
 
+  private var recordingHelp: String {
+    if isRecording {
+      return "Stop recording. \(recordingFrameCount) frames captured."
+    }
+    if canRecord {
+      return "Record live screencast frames."
+    }
+    return "Recording is available while live screencast is active."
+  }
+
   private func beginNavigation() {
     guard !isNavigating else { return }
     let requestedURL = navigationText
@@ -225,22 +297,4 @@ struct SessionInfoBar: View {
     }
   }
 
-  private func warningLabel(
-    _ title: String,
-    message: String,
-    onDismiss: @escaping () -> Void
-  ) -> some View {
-    HStack(spacing: 4) {
-      Label(title, systemImage: "exclamationmark.triangle.fill")
-        .font(.caption)
-        .foregroundStyle(.orange)
-        .help(message)
-      Button(action: onDismiss) {
-        Image(systemName: "xmark.circle.fill")
-          .font(.caption)
-      }
-      .buttonStyle(.plain)
-      .help("Dismiss")
-    }
-  }
 }

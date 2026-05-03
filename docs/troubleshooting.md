@@ -85,11 +85,13 @@ The smoke targets intentionally fail with exit code `2` until opted in:
 RUN_GUI_SMOKE=1 make smoke-app
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
+RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 RUN_LOGIN_ITEM_SMOKE=1 make smoke-login-item
 RUN_LIVE_CDP_SMOKE=1 make smoke-live-cdp
 ```
 
-Chrome is required for expanded-session smoke. Set `CHROME_PATH` if it is not at
+Chrome is required for expanded-session and recording-export smoke. Set
+`CHROME_PATH` if it is not at
 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
 
 ## Package Or Codesign Fails

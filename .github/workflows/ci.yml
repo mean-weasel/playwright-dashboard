@@ -21,7 +21,9 @@ on:
           - none
           - live
           - fallback
+          - recording
           - both
+          - all
 
 concurrency:
   group: ci-${{ github.head_ref || github.sha }}
@@ -261,7 +263,9 @@ jobs:
       needs.package-check.result == 'success' &&
       (github.event_name == 'schedule' ||
        (github.event_name == 'workflow_dispatch' &&
-        (inputs.gui_smoke_mode == 'live' || inputs.gui_smoke_mode == 'both')))
+        (inputs.gui_smoke_mode == 'live' ||
+         inputs.gui_smoke_mode == 'both' ||
+         inputs.gui_smoke_mode == 'all')))
     steps:
       - uses: actions/checkout@v5
       - name: Select Xcode
@@ -297,7 +301,9 @@ jobs:
       needs.package-check.result == 'success' &&
       (github.event_name == 'schedule' ||
        (github.event_name == 'workflow_dispatch' &&
-        (inputs.gui_smoke_mode == 'fallback' || inputs.gui_smoke_mode == 'both')))
+        (inputs.gui_smoke_mode == 'fallback' ||
+         inputs.gui_smoke_mode == 'both' ||
+         inputs.gui_smoke_mode == 'all')))
     steps:
       - uses: actions/checkout@v5
       - name: Select Xcode
@@ -320,6 +326,49 @@ jobs:
           name: gui-smoke-fallback-artifacts
           path: |
             dist/gui-smoke-fallback-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+
+  gui-smoke-recording:
+    name: GUI Smoke Recording Export
+    runs-on: macos-15
+    timeout-minutes: 20
+    needs: [package-check]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-check.result == 'success' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.gui_smoke_mode == 'recording' || inputs.gui_smoke_mode == 'all')))
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for recording export smoke."
+            exit 1
+          fi
+      - name: Run recording export smoke
+        env:
+          RUN_RECORDING_EXPORT_SMOKE: "1"
+        run: make smoke-recording-export
+      - name: Collect recording export artifacts
+        if: always()
+        run: |
+          mkdir -p dist/gui-smoke-recording-artifacts
+          if [ -d "$HOME/Downloads/PlaywrightDashboard Recordings" ]; then
+            cp -R "$HOME/Downloads/PlaywrightDashboard Recordings" \
+              dist/gui-smoke-recording-artifacts/recordings
+          fi
+      - name: Upload recording smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gui-smoke-recording-artifacts
+          path: |
+            dist/gui-smoke-recording-artifacts/**
             dist/PlaywrightDashboard.zip
           if-no-files-found: ignore
 
