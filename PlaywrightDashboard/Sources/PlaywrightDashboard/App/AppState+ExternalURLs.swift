@@ -36,6 +36,15 @@ extension AppState {
     return openExternalURL(url)
   }
 
+  @discardableResult
+  func openRecordingDirectory(_ url: URL) -> Bool {
+    guard url.isFileURL else {
+      lastOpenURLError = "Recording location is not a local file URL."
+      return false
+    }
+    return openExternalURL(url)
+  }
+
   func dismissOpenURLError() {
     lastOpenURLError = nil
   }

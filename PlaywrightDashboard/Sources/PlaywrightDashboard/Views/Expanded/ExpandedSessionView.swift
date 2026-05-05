@@ -5,7 +5,9 @@ private let logger = Logger(subsystem: "PlaywrightDashboard", category: "Expande
 
 struct ExpandedSessionView: View {
   @Environment(AppState.self) var appState
+  @Environment(\.openWindow) var openWindow
   let session: SessionRecord
+  var onBack: (() -> Void)?
   @AppStorage("expandedShowMetadata") private var showMetadata = true
   @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
   @State var consecutiveFailures = 0
@@ -17,7 +19,22 @@ struct ExpandedSessionView: View {
   @State var targetMonitorMode: ExpandedTargetMonitorMode = .connecting
   @State var lastTargetRefreshError: String?
   @State var lastCDPError: String?
-  @State var frameCountSinceSave = 0
+  @State var currentFrameImage: NSImage?
+  @State var currentFrameResult: CDPClient.ScreenshotResult?
+  @State var framesSinceLastPersist = 0
+  @State var hasPersistedScreencastFrame = false
+  @State var lastLocalInteractionAt: Date?
+  @State var showsAgentActivityWarning = false
+  @State var agentActivityDismissTask: Task<Void, Never>?
+  @State var recordingWriter: ExpandedRecordingWriter?
+  @State var isRecording = false
+  @State var isFinishingRecording = false
+  @State var recordingFrameCount = 0
+  @State var recordingError: String?
+  @State var lastRecordingURL: URL?
+  @State var lastRecordingExportURL: URL?
+  @State var isExportingRecording = false
+  @State var recordingExportError: String?
   private var selectedTargetKey: String {
     session.selectedTargetId ?? "default"
   }
@@ -29,8 +46,22 @@ struct ExpandedSessionView: View {
     VStack(spacing: 0) {
       SessionInfoBar(
         session: session,
-        onBack: { appState.selectedSessionId = nil },
+        onBack: backAction,
+        onDetach: detachedWindowAction,
         onNavigate: navigate,
+        canRecord: canRecord,
+        isRecording: isRecording,
+        isFinishingRecording: isFinishingRecording,
+        recordingFrameCount: recordingFrameCount,
+        recordingError: recordingError,
+        lastRecordingURL: lastRecordingURL,
+        lastRecordingExportURL: lastRecordingExportURL,
+        isExportingRecording: isExportingRecording,
+        recordingExportError: recordingExportError,
+        onToggleRecording: toggleRecording,
+        onExportRecording: exportLastRecording,
+        onDismissRecordingError: { recordingError = nil },
+        onDismissRecordingExportError: { recordingExportError = nil },
         showMetadata: $showMetadata,
         interactionEnabled: $interactionEnabled,
         connectionSummary: connectionSummary
@@ -68,7 +99,7 @@ struct ExpandedSessionView: View {
     Group {
       if session.cdpPort <= 0 {
         ExpandedNoCDPState()
-      } else if let nsImage = session.screenshotImage {
+      } else if let nsImage = currentFrameImage ?? session.screenshotImage {
         ZStack(alignment: .topTrailing) {
           InteractiveScreenshotSurface(
             image: nsImage,
@@ -79,22 +110,8 @@ struct ExpandedSessionView: View {
           )
           .padding(20)
 
-          ExpandedRefreshBadge(
-            frameMode: frameMode
-          )
-          .padding(28)
-
-          if interactionEnabled {
-            ExpandedInteractionBadge()
-              .padding(.top, 58)
-              .padding(.trailing, 28)
-          }
-
-          if consecutiveFailures >= failureWarningThreshold {
-            ExpandedConnectionWarningBadge()
-              .padding(.top, interactionEnabled ? 88 : 58)
-              .padding(.trailing, 28)
-          }
+          badgeStack
+            .padding(28)
         }
       } else if consecutiveFailures >= failureWarningThreshold {
         ExpandedConnectionFailedState(cdpPort: session.cdpPort)
@@ -106,8 +123,31 @@ struct ExpandedSessionView: View {
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
+  private var badgeStack: some View {
+    VStack(alignment: .trailing, spacing: 6) {
+      ExpandedRefreshBadge(frameMode: frameMode)
+
+      if interactionEnabled {
+        ExpandedInteractionBadge()
+      }
+
+      if showsAgentActivityWarning {
+        ExpandedAgentActivityBadge()
+      }
+
+      if isRecording {
+        ExpandedRecordingBadge(frameCount: recordingFrameCount)
+      }
+
+      if consecutiveFailures >= failureWarningThreshold {
+        ExpandedConnectionWarningBadge()
+      }
+    }
+  }
+
   private func dispatchClick(_ point: CGPoint) {
     guard interactionEnabled, session.cdpPort > 0 else { return }
+    noteLocalInteraction()
     Task {
       do {
         if let pageConnection {
@@ -128,6 +168,7 @@ struct ExpandedSessionView: View {
 
   private func dispatchScroll(_ point: CGPoint, deltaX: CGFloat, deltaY: CGFloat) {
     guard interactionEnabled, session.cdpPort > 0 else { return }
+    noteLocalInteraction()
     Task {
       do {
         if let pageConnection {
@@ -155,6 +196,7 @@ struct ExpandedSessionView: View {
 
   private func dispatchKeyPress(_ input: CDPClient.KeyEventInput) {
     guard interactionEnabled, session.cdpPort > 0 else { return }
+    noteLocalInteraction()
     Task {
       do {
         if let pageConnection {
@@ -176,6 +218,7 @@ struct ExpandedSessionView: View {
     guard session.cdpPort > 0 else {
       throw CDPClient.CDPError.noPages
     }
+    noteLocalInteraction()
 
     let normalizedURL: String
     if let pageConnection {
@@ -199,6 +242,36 @@ struct ExpandedSessionView: View {
     let client = CDPClient(port: session.cdpPort)
     fallbackInputClient = client
     return client
+  }
+
+  private func noteLocalInteraction() {
+    lastLocalInteractionAt = Date()
+  }
+
+  func detectAgentActivityIfNeeded(
+    previous: CDPClient.ScreenshotResult?,
+    new: CDPClient.ScreenshotResult
+  ) {
+    guard
+      ExpandedAgentActivityHeuristic.shouldShowWarning(
+        interactionEnabled: interactionEnabled,
+        previousURL: previous?.url,
+        previousTitle: previous?.title,
+        newURL: new.url,
+        newTitle: new.title,
+        lastLocalInteractionAt: lastLocalInteractionAt
+      )
+    else { return }
+
+    showsAgentActivityWarning = true
+    agentActivityDismissTask?.cancel()
+    agentActivityDismissTask = Task {
+      do {
+        try await Task.sleep(for: ExpandedAgentActivityHeuristic.warningDuration)
+      } catch { return }
+      showsAgentActivityWarning = false
+      agentActivityDismissTask = nil
+    }
   }
 
 }

@@ -1,6 +1,9 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
+BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
+APP_VERSION ?= 0.1.0
+BUILD_NUMBER ?= 1
 PKG_DIR := PlaywrightDashboard
 BUILD_DIR := $(PKG_DIR)/.build
 CONFIGURATION ?= release
@@ -10,6 +13,7 @@ INSTALL_DIR := $(HOME)/Applications
 APP_BUNDLE := $(INSTALL_DIR)/$(APP_NAME).app
 DIST_DIR := dist
 PACKAGE_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
+PACKAGE_ZIP := $(DIST_DIR)/$(APP_NAME).zip
 VISUAL_SNAPSHOT_BASELINE_DIR ?= $(DIST_DIR)/visual-snapshots-baseline
 VISUAL_SNAPSHOT_COMPARE_DIR ?= $(DIST_DIR)/visual-snapshots
 VISUAL_SNAPSHOT_DIFF_THRESHOLD ?= 0.01
@@ -68,7 +72,7 @@ $(PACKAGE_BUNDLE): build
 		'  <key>CFBundleExecutable</key>' \
 		'  <string>$(APP_NAME)</string>' \
 		'  <key>CFBundleIdentifier</key>' \
-		'  <string>com.neonwatty.PlaywrightDashboard</string>' \
+		'  <string>$(BUNDLE_ID)</string>' \
 		'  <key>CFBundleName</key>' \
 		'  <string>$(APP_NAME)</string>' \
 		'  <key>CFBundleDisplayName</key>' \
@@ -78,9 +82,9 @@ $(PACKAGE_BUNDLE): build
 		'  <key>CFBundlePackageType</key>' \
 		'  <string>APPL</string>' \
 		'  <key>CFBundleShortVersionString</key>' \
-		'  <string>0.1.0</string>' \
+		'  <string>$(APP_VERSION)</string>' \
 		'  <key>CFBundleVersion</key>' \
-		'  <string>1</string>' \
+		'  <string>$(BUILD_NUMBER)</string>' \
 		'  <key>LSApplicationCategoryType</key>' \
 		'  <string>public.app-category.developer-tools</string>' \
 		'  <key>NSHumanReadableCopyright</key>' \
@@ -92,6 +96,8 @@ $(PACKAGE_BUNDLE): build
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 
 CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -m1 '"' | sed 's/.*"\(.*\)"/\1/' || echo -)
+DEVELOPER_ID_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -m1 'Developer ID Application' | sed 's/.*"\(.*\)"/\1/')
+NOTARY_PROFILE ?=
 
 sign-package: $(PACKAGE_BUNDLE)
 	@if [ "$(CODESIGN_IDENTITY)" = "-" ]; then \
@@ -105,7 +111,7 @@ sign-package: $(PACKAGE_BUNDLE)
 	fi
 
 package: sign-package
-	rm -f $(DIST_DIR)/$(APP_NAME).zip
+	rm -f $(PACKAGE_ZIP)
 	cd $(DIST_DIR) && zip -qr $(APP_NAME).zip $(APP_NAME).app
 
 validate-package: package
@@ -113,17 +119,41 @@ validate-package: package
 	test -f $(PACKAGE_BUNDLE)/Contents/Resources/AppIcon.icns
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx '$(APP_NAME)'
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx '$(BUNDLE_ID)'
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx '$(APP_VERSION)'
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx '$(BUILD_NUMBER)'
 	/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx 'APPL'
 	/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' $(PACKAGE_BUNDLE)/Contents/Info.plist | grep -qx 'AppIcon'
 	codesign --verify --strict --deep $(PACKAGE_BUNDLE)
-	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/MacOS/$(APP_NAME)'
-	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/Info.plist'
-	unzip -l $(DIST_DIR)/$(APP_NAME).zip | grep -qx '.*$(APP_NAME).app/Contents/Resources/AppIcon.icns'
+	unzip -l $(PACKAGE_ZIP) | grep -qx '.*$(APP_NAME).app/Contents/MacOS/$(APP_NAME)'
+	unzip -l $(PACKAGE_ZIP) | grep -qx '.*$(APP_NAME).app/Contents/Info.plist'
+	unzip -l $(PACKAGE_ZIP) | grep -qx '.*$(APP_NAME).app/Contents/Resources/AppIcon.icns'
 	rm -rf $(DIST_DIR)/zipcheck
 	mkdir -p $(DIST_DIR)/zipcheck
-	unzip -q $(DIST_DIR)/$(APP_NAME).zip -d $(DIST_DIR)/zipcheck
+	unzip -q $(PACKAGE_ZIP) -d $(DIST_DIR)/zipcheck
 	codesign --verify --strict --deep $(DIST_DIR)/zipcheck/$(APP_NAME).app
 	rm -rf $(DIST_DIR)/zipcheck
+
+beta-release: qa validate-package
+	@echo "Beta artifact: $(PACKAGE_ZIP)"
+
+developer-id-package:
+	@test -n "$(DEVELOPER_ID_IDENTITY)" || { echo "No Developer ID Application identity found. Set DEVELOPER_ID_IDENTITY='Developer ID Application: ...'"; exit 2; }
+	$(MAKE) package CODESIGN_IDENTITY="$(DEVELOPER_ID_IDENTITY)"
+
+notarize-package: developer-id-package
+	@test -n "$(NOTARY_PROFILE)" || { echo "Set NOTARY_PROFILE to an xcrun notarytool keychain profile"; exit 2; }
+	xcrun notarytool submit $(PACKAGE_ZIP) --keychain-profile "$(NOTARY_PROFILE)" --wait
+
+staple-package: notarize-package
+	xcrun stapler staple $(PACKAGE_BUNDLE)
+	rm -f $(PACKAGE_ZIP)
+	cd $(DIST_DIR) && zip -qr $(APP_NAME).zip $(APP_NAME).app
+
+notarized-release: qa staple-package
+	codesign --verify --strict --deep $(PACKAGE_BUNDLE)
+	spctl --assess --type execute --verbose $(PACKAGE_BUNDLE)
+	@echo "Notarized artifact: $(PACKAGE_ZIP)"
 
 check-accessibility:
 	scripts/check_accessibility.mjs
@@ -176,6 +206,14 @@ smoke-expanded-fallback:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
+
+smoke-recording-export:
+	@if [ "$$RUN_RECORDING_EXPORT_SMOKE" != "1" ]; then \
+		echo "Set RUN_RECORDING_EXPORT_SMOKE=1 to run the recording export smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) validate-package
+	scripts/smoke_recording_export.mjs
 
 visual-snapshots:
 	$(MAKE) check-accessibility

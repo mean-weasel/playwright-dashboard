@@ -81,6 +81,7 @@ Always build and validate the package first, or use targets that depend on
 make check-accessibility
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
+RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```
 
@@ -88,6 +89,8 @@ GUI smoke and visual snapshot tests require Accessibility permission for the
 terminal/editor, Node.js, `/usr/bin/osascript`, and any wrapper process. They
 also require Chrome, using `CHROME_PATH` when it is not installed at the default
 path.
+The recording export smoke launches the packaged app and Chrome/CDP, but avoids
+AppleScript UI traversal by using the app's smoke-only recording runner.
 
 Visual snapshots are artifact-only. Baseline comparison is intentionally
 non-blocking:

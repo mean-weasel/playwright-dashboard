@@ -36,6 +36,13 @@ To verify screenshot fallback mode:
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 ```
 
+To verify live screencast recording and MP4 export without relying on
+AppleScript toolbar traversal:
+
+```sh
+RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
+```
+
 The smoke test launches Chrome with CDP, creates a temporary daemon `.session` file, opens the app directly into the expanded session view, and verifies:
 
 - The expanded view reaches `Live screencast`.
@@ -47,6 +54,13 @@ The smoke test launches Chrome with CDP, creates a temporary daemon `.session` f
 - Pointer click and wheel events reach the page.
 - Click coordinates still work after resizing the app window.
 - Text input and special keys reach the page through the expanded surface.
+- The recording toggle is available in live screencast mode and captures raw
+  JPEG frames plus `manifest.json` under `~/Downloads/PlaywrightDashboard Recordings`.
+  After stopping a recording, the folder button should reveal the completed
+  recording directory in Finder. The film button should export `recording.mp4`
+  into the same directory without deleting the raw frames.
+- When the browser changes during control mode without recent local input, the
+  expanded view shows an `Agent active` warning badge.
 
 The fallback smoke launches the same packaged app with a smoke-only flag that
 forces the expanded view to skip `Page.startScreencast`. It verifies the
@@ -54,11 +68,20 @@ forces the expanded view to skip `Page.startScreencast`. It verifies the
 interaction path. Pixel-change detection is only required in live screencast
 mode; fallback mode remains structural and event-driven.
 
+The recording export smoke launches a temporary Chrome/CDP page, lets the app's
+smoke-only runner capture live screencast frames through the same recording
+writer and MP4 exporter used by the UI, and validates `manifest.json`,
+`frame-000001.jpg`, and `recording.mp4` on disk.
+
 ## Expected UI
 
 - The top-right badge should read `Live screencast`.
 - If streaming fails, the badge should read `Snapshot fallback`; that is acceptable only when explicitly testing fallback behavior.
 - The interaction badge should appear after enabling screenshot interaction.
+- The recording badge should appear after starting a recording and disappear
+  after stopping it.
+- The `Agent active` badge may appear briefly if another client changes the
+  page while interaction mode is set to Control.
 
 ## Manual Checks
 
@@ -68,7 +91,13 @@ mode; fallback mode remains structural and event-driven.
 4. Enable interaction and click a visible page control.
 5. Type into a focused input, then press Backspace and Enter.
 6. Resize the window and repeat the click.
-7. Leave the expanded view open for at least 30 seconds and confirm it does not fall back.
+7. Start recording, wait for several visible page changes, stop recording, and
+   verify the recording directory contains JPEG frames and `manifest.json`.
+   Export MP4, verify `recording.mp4` appears, and use the folder button to
+   reveal the same directory in Finder.
+8. While Control mode is enabled, change the page from another CDP client and
+   confirm the `Agent active` badge appears briefly.
+9. Leave the expanded view open for at least 30 seconds and confirm it does not fall back.
 
 ## Failure Capture
 

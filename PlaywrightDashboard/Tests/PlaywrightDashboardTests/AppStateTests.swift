@@ -463,6 +463,34 @@ struct AppStateTests {
     #expect(appState.lastOpenURLError == "Only HTTP and HTTPS URLs can be opened.")
   }
 
+  @Test("openRecordingDirectory opens local file URL")
+  func openRecordingDirectoryOpensLocalFileURL() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+    appState.lastOpenURLError = "Previous error"
+    let url = URL(fileURLWithPath: "/tmp/PlaywrightDashboard Recordings/session")
+
+    #expect(appState.openRecordingDirectory(url))
+    #expect(opener.urls == [url])
+    #expect(appState.lastOpenURLError == nil)
+  }
+
+  @Test("openRecordingDirectory rejects remote URLs")
+  func openRecordingDirectoryRejectsRemoteURLs() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+
+    #expect(appState.openRecordingDirectory(URL(string: "https://example.com/recording")!) == false)
+    #expect(opener.urls.isEmpty)
+    #expect(appState.lastOpenURLError == "Recording location is not a local file URL.")
+  }
+
   @Test("openCDPInspector opens selected target inspector URL")
   func openCDPInspectorOpensSelectedTargetURL() {
     let opener = URLOpenerRecorder()

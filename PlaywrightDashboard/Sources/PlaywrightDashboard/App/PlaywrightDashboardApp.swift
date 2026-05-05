@@ -54,6 +54,7 @@ struct PlaywrightDashboardApp: App {
     if smokeArguments.opensSettings {
       Self.openSmokeSettingsWindow(appState: state)
     }
+    SmokeRecordingExportRunner.startIfNeeded(arguments: smokeArguments, appState: state)
   }
 
   var body: some Scene {
@@ -77,12 +78,45 @@ struct PlaywrightDashboardApp: App {
     .modelContainer(modelContainer)
     .defaultSize(width: 1100, height: 700)
 
+    WindowGroup("Detached Session", for: String.self) { $sessionId in
+      DetachedSessionWindow(sessionId: sessionId)
+        .environment(appState)
+    }
+    .modelContainer(modelContainer)
+    .defaultSize(width: 980, height: 680)
+
     Settings {
       SettingsView()
         .environment(appState)
     }
   }
 
+}
+
+private struct DetachedSessionWindow: View {
+  @Environment(AppState.self) private var appState
+  @Environment(\.dismiss) private var dismiss
+  let sessionId: String?
+
+  var body: some View {
+    if let session {
+      ExpandedSessionView(session: session, onBack: { dismiss() })
+        .environment(appState)
+        .frame(minWidth: 760, minHeight: 480)
+    } else {
+      ContentUnavailableView(
+        "Session unavailable",
+        systemImage: "xmark.circle",
+        description: Text("The selected Playwright session is no longer available.")
+      )
+      .frame(minWidth: 520, minHeight: 320)
+    }
+  }
+
+  private var session: SessionRecord? {
+    guard let sessionId else { return nil }
+    return appState.sessions.first { $0.sessionId == sessionId }
+  }
 }
 
 extension PlaywrightDashboardApp {

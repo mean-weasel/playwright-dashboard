@@ -50,6 +50,25 @@ This builds `dist/PlaywrightDashboard.app`, signs it with the first available
 codesigning identity or ad-hoc signing, validates `Info.plist`, verifies the
 signature, and creates `dist/PlaywrightDashboard.zip`.
 
+Create a local beta artifact after the standard QA gate:
+
+```sh
+make beta-release APP_VERSION=0.1.0 BUILD_NUMBER=1
+```
+
+For a notarized external beta, configure an `xcrun notarytool` keychain profile
+and use a Developer ID Application certificate:
+
+```sh
+make notarized-release \
+  APP_VERSION=0.1.0 \
+  BUILD_NUMBER=1 \
+  NOTARY_PROFILE=playwright-dashboard
+```
+
+Set `DEVELOPER_ID_IDENTITY` when the default Developer ID certificate selection
+is not the one you want.
+
 Install to `~/Applications` and launch it:
 
 ```sh
@@ -120,6 +139,7 @@ Expanded-session GUI smoke tests are opt-in:
 ```sh
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
+RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 ```
 
 To keep failure artifacts:

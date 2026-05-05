@@ -11,6 +11,9 @@ on:
         options:
           - live
           - fallback
+          - recording
+          - both
+          - all
 
 concurrency:
   group: gui-smoke-${{ github.ref }}
@@ -41,15 +44,30 @@ jobs:
         env:
           RUN_EXPANDED_INTERACTION_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
-        if: inputs.mode == 'live'
+        if: inputs.mode == 'live' || inputs.mode == 'both' || inputs.mode == 'all'
         run: make smoke-expanded-interaction
 
       - name: Run expanded fallback smoke
         env:
           RUN_EXPANDED_FALLBACK_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
-        if: inputs.mode == 'fallback'
+        if: inputs.mode == 'fallback' || inputs.mode == 'both' || inputs.mode == 'all'
         run: make smoke-expanded-fallback
+
+      - name: Run recording export smoke
+        env:
+          RUN_RECORDING_EXPORT_SMOKE: "1"
+        if: inputs.mode == 'recording' || inputs.mode == 'all'
+        run: make smoke-recording-export
+
+      - name: Collect recording export artifacts
+        if: always()
+        run: |
+          mkdir -p dist/gui-smoke-artifacts
+          if [ -d "$HOME/Downloads/PlaywrightDashboard Recordings" ]; then
+            cp -R "$HOME/Downloads/PlaywrightDashboard Recordings" \
+              dist/gui-smoke-artifacts/recordings
+          fi
 
       - name: Upload smoke artifacts
         if: always()

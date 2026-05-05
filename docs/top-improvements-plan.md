@@ -11,7 +11,9 @@ Move Playwright Dashboard from a credible MVP toward a trustworthy daily-use too
 - Rename settings and controls that imply live video so they describe snapshot refresh cadence.
 - Surface CLI availability and setup actions where users encounter an empty dashboard.
 
-Status: started.
+Status: implemented. Empty states are setup-aware, CLI availability is surfaced
+in settings, and expanded-view badges distinguish live screencast from snapshot
+fallback.
 
 ## Phase 2: True Live Screencast
 
@@ -21,16 +23,28 @@ Status: started.
 - Keep screenshot polling as a fallback when screencast startup fails.
 - Add tests for frame parsing, acknowledgement, connection cancellation, and fallback behavior.
 
-Status: started. The expanded session view now prefers `Page.startScreencast`, acknowledges frames, and falls back to screenshot polling when streaming fails. Remaining work: keep user input on the same persistent page connection and add renderer/performance QA with a real browser.
+Status: implemented. The expanded session view prefers `Page.startScreencast`,
+acknowledges frames, keeps user input on the same persistent page WebSocket when
+streaming is active, and falls back to screenshot polling when streaming fails.
+Live frames render through transient expanded-view state; the persisted session
+screenshot is refreshed on the first frame, periodically after that, and when
+the stream exits so save/history behavior remains current.
 
 ## Phase 3: Interaction Reliability
 
 - Keep pointer and keyboard forwarding on the same persistent CDP connection used by the expanded session.
 - Add clearer focus state and a visible interaction mode indicator.
-- Add agent-active detection once incoming external CDP activity can be observed.
+- Add an agent-active warning when the browser changes during control mode and
+  the change was not close to local user input.
 - Add manual and automated checks for click, scroll, typing, special keys, and coordinate mapping after resize.
 
-Status: started. Pointer, scroll, and keyboard forwarding now use the same persistent page WebSocket as screencast frames when live screencast is active, with screenshot-polling command fallback still available. The GUI smoke covers click, scroll, typing, Enter, Backspace, and resize remapping; unit tests now cover special-key and modifier mapping before events are sent to CDP.
+Status: implemented. Pointer, scroll, and keyboard forwarding now use the same
+persistent page WebSocket as screencast frames when live screencast is active,
+with screenshot-polling command fallback still available. The expanded view
+shows a short-lived `Agent active` warning when frame metadata changes during
+control mode without recent local input. The GUI smoke covers click, scroll,
+typing, Enter, Backspace, and resize remapping; unit tests cover special-key and
+modifier mapping before events are sent to CDP.
 
 ## Phase 4: QA and CI
 
@@ -40,13 +54,24 @@ Status: started. Pointer, scroll, and keyboard forwarding now use the same persi
 - Promote GUI smoke tests into a controlled CI job once runner accessibility and browser availability are stable.
 - Add visual snapshots for dashboard empty state, populated grid, expanded snapshot view, settings, and error states.
 
-Status: started. The expanded-session GUI smoke can run in live screencast mode or forced snapshot-fallback mode, and CI has an optional manual workflow for both. Main CI now also has a weekly scheduled run, manual dispatch, optional GUI smoke jobs, artifact-only visual snapshots, coverage/app artifacts, and retained build/test logs. Visual snapshots now produce a manifest, CI summary table, and non-blocking baseline status when `VISUAL_SNAPSHOT_BASELINE_DIR` is configured. Expanded toolbar icon controls now expose explicit accessibility labels and identifiers.
+Status: implemented. The expanded-session GUI smoke can run in live screencast
+mode or forced snapshot-fallback mode, and CI has an optional manual workflow
+for both. Main CI has a weekly scheduled run, manual dispatch, optional GUI
+smoke jobs, artifact-only visual snapshots, coverage/app artifacts, and retained
+build/test logs. Visual snapshots produce a manifest, CI summary table, and
+non-blocking baseline status when `VISUAL_SNAPSHOT_BASELINE_DIR` is configured.
+Expanded toolbar icon controls expose explicit accessibility labels and
+identifiers.
 
 ## Phase 5: Feature Completeness
 
 - Add in-app navigation for the current session URL.
 - Add multi-target/tab selection.
 - Add detached session windows after the expanded view has stable streaming.
-- Add recording only after screencast frames are available and performance is measured.
+- Add recording from live screencast frames.
 
-Status: planned.
+Status: implemented. In-app navigation, multi-target/tab selection, detached
+session windows, raw live-frame recording, and MP4 export are implemented.
+Recording writes JPEG frames plus `manifest.json`, can reveal the capture folder
+in Finder, and can export `recording.mp4`; GIF export remains a future
+enhancement.
