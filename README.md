@@ -60,6 +60,9 @@ For a notarized external beta, configure an `xcrun notarytool` keychain profile
 and use a Developer ID Application certificate:
 
 ```sh
+xcrun notarytool store-credentials playwright-dashboard \
+  --team-id 3CDYUL285D
+
 make notarized-release \
   APP_VERSION=0.1.0 \
   BUILD_NUMBER=1 \
@@ -67,7 +70,9 @@ make notarized-release \
 ```
 
 Set `DEVELOPER_ID_IDENTITY` when the default Developer ID certificate selection
-is not the one you want.
+is not the one you want. The Developer ID Application certificate must be
+installed in the login keychain before this target can sign the app for
+notarization.
 
 Install to `~/Applications` and launch it:
 
