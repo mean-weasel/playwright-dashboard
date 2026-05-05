@@ -397,7 +397,7 @@ function testPage() {
 
 function uiScript() {
   return `
-set expectedRefreshBadge to "${forceSnapshotFallback ? "Snapshot fallback" : "Live screencast"}"
+set expectedRefreshBadge to "${forceSnapshotFallback ? "Snapshots" : "Live"}"
 
 on waitForProcess(processName, maxAttempts)
   repeat with attempt from 1 to maxAttempts
@@ -490,7 +490,7 @@ set inspectorButton to waitForNamedElement(appName, "expanded-open-cdp-inspector
 set metadataButton to waitForNamedElement(appName, "expanded-metadata-toggle", 80)
 
 set interactionMode to waitForNamedElement(appName, "expanded-interaction-mode", 80)
-set interactionButton to waitForFirstNamedElement(appName, "Control", "expanded-interaction-toggle", 80)
+set interactionButton to waitForFirstNamedElement(appName, "Control", "cursorarrow.click.2", 80)
 tell application "System Events" to click interactionButton
 set interactionBadge to waitForNamedElement(appName, "Control mode", 40)
 
@@ -655,22 +655,27 @@ return output
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { cwd: repoRoot, ...options }, (error, stdout, stderr) => {
-      if (error) {
-        const output = stderr || stdout || error.message;
-        const message = isAccessibilityDenied(output)
-          ? `${accessibilityHelp}\n\n${output}`
-          : `${command} failed: ${output}`;
-        reject(new Error(message));
-        return;
-      }
-      resolve(stdout);
-    });
+    execFile(
+      command,
+      args,
+      { cwd: repoRoot, maxBuffer: 10 * 1024 * 1024, ...options },
+      (error, stdout, stderr) => {
+        if (error) {
+          const output = stderr || stdout || error.message;
+          const message = isAccessibilityDenied(output)
+            ? `${accessibilityHelp}\n\n${output}`
+            : `${command} failed: ${output}`;
+          reject(new Error(message));
+          return;
+        }
+        resolve(stdout);
+      },
+    );
   });
 }
 
 function runAppleScript(script) {
-  return run("osascript", ["-e", script]);
+  return run("osascript", ["-e", script], { timeout: 120_000 });
 }
 
 async function waitFor(predicate, label, timeoutMs = 30_000) {
