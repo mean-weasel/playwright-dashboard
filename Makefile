@@ -96,6 +96,7 @@ $(PACKAGE_BUNDLE): build
 	plutil -lint $(PACKAGE_BUNDLE)/Contents/Info.plist
 
 CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -m1 '"' | sed 's/.*"\(.*\)"/\1/' || echo -)
+CODESIGN_OPTIONS ?=
 DEVELOPER_ID_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -m1 'Developer ID Application' | sed 's/.*"\(.*\)"/\1/')
 NOTARY_PROFILE ?=
 
@@ -103,7 +104,7 @@ sign-package: $(PACKAGE_BUNDLE)
 	@if [ "$(CODESIGN_IDENTITY)" = "-" ]; then \
 		echo "No developer signing identity found, using ad-hoc signing"; \
 		codesign --force --sign - --timestamp=none $(PACKAGE_BUNDLE); \
-	elif codesign --force --sign "$(CODESIGN_IDENTITY)" $(PACKAGE_BUNDLE); then \
+	elif codesign --force --sign "$(CODESIGN_IDENTITY)" $(CODESIGN_OPTIONS) $(PACKAGE_BUNDLE); then \
 		echo "Signed with: $(CODESIGN_IDENTITY)"; \
 	else \
 		echo "ERROR: codesign failed with identity '$(CODESIGN_IDENTITY)'. Falling back to ad-hoc signing."; \
@@ -139,7 +140,7 @@ beta-release: qa validate-package
 
 developer-id-package:
 	@test -n "$(DEVELOPER_ID_IDENTITY)" || { echo "No Developer ID Application identity found. Set DEVELOPER_ID_IDENTITY='Developer ID Application: ...'"; exit 2; }
-	$(MAKE) package CODESIGN_IDENTITY="$(DEVELOPER_ID_IDENTITY)"
+	$(MAKE) package CODESIGN_IDENTITY="$(DEVELOPER_ID_IDENTITY)" CODESIGN_OPTIONS="--timestamp --options runtime"
 
 notarize-package: developer-id-package
 	@test -n "$(NOTARY_PROFILE)" || { echo "Set NOTARY_PROFILE to an xcrun notarytool keychain profile"; exit 2; }
