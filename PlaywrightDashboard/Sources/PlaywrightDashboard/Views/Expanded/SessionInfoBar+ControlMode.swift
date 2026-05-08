@@ -16,23 +16,36 @@ extension SessionInfoBar {
         .accessibilityIdentifier("expanded-enable-control-mode")
         .help(controlModeOptInHelp)
       } else {
-        Picker(
-          "Interaction mode",
-          selection: Binding(
-            get: { interactionEnabled },
-            set: { interactionEnabled = $0 }
-          )
-        ) {
-          Label("View", systemImage: "eye").tag(false)
-          Label("Control", systemImage: "cursorarrow.click.2").tag(true)
+        HStack(spacing: 8) {
+          Picker(
+            "Interaction mode",
+            selection: Binding(
+              get: { interactionEnabled },
+              set: { interactionEnabled = $0 }
+            )
+          ) {
+            Label("View", systemImage: "eye").tag(false)
+            Label("Control", systemImage: "cursorarrow.click.2").tag(true)
+          }
+          .pickerStyle(.segmented)
+          .controlSize(.small)
+          .frame(width: 150)
+          .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
+          .accessibilityLabel("Browser interaction mode")
+          .accessibilityIdentifier("expanded-interaction-mode")
+          .help(interactionHelp)
+
+          Button {
+            returnToSafeMode()
+          } label: {
+            Image(systemName: "lock.shield")
+              .font(.body)
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("Return to Safe Mode")
+          .accessibilityIdentifier("expanded-return-to-safe-mode")
+          .help("Re-enable Safe read-only mode and stop forwarding browser input.")
         }
-        .pickerStyle(.segmented)
-        .controlSize(.small)
-        .frame(width: 150)
-        .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
-        .accessibilityLabel("Browser interaction mode")
-        .accessibilityIdentifier("expanded-interaction-mode")
-        .help(interactionHelp)
       }
     }
   }
@@ -51,5 +64,13 @@ extension SessionInfoBar {
     appState.dismissOpenURLError()
     interactionEnabled = true
     onEnableControlMode()
+    modeStatusMessage = "Control mode enabled. Browser input can reach this session."
+  }
+
+  func returnToSafeMode() {
+    appState.dismissOpenURLError()
+    interactionEnabled = false
+    onReturnToSafeMode()
+    modeStatusMessage = "Safe mode restored. Navigation and input forwarding are disabled."
   }
 }

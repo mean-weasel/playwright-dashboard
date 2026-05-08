@@ -18,6 +18,7 @@ struct SessionInfoBar: View {
   let onToggleRecording: () -> Void
   let onExportRecording: () -> Void
   let onEnableControlMode: () -> Void
+  let onReturnToSafeMode: () -> Void
   let onDismissRecordingError: () -> Void
   let onDismissRecordingExportError: () -> Void
   @Binding var showMetadata: Bool
@@ -29,6 +30,7 @@ struct SessionInfoBar: View {
   @State var navigationText = ""
   @State var isNavigating = false
   @State var navigationError: String?
+  @State var modeStatusMessage: String?
   @State var showsControlModeConfirmation = false
   @FocusState var isFieldFocused: Bool
   @FocusState var isURLFieldFocused: Bool
@@ -110,6 +112,12 @@ struct SessionInfoBar: View {
       if let error = recordingExportError {
         ExpandedWarningLabel("Export failed", message: error) {
           onDismissRecordingExportError()
+        }
+      }
+
+      if let modeStatusMessage {
+        ExpandedInfoLabel("Mode changed", message: modeStatusMessage) {
+          self.modeStatusMessage = nil
         }
       }
 

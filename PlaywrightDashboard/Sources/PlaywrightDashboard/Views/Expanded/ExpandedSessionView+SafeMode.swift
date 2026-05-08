@@ -28,4 +28,9 @@ extension ExpandedSessionView {
     interactionEnabled = true
     safeMode = false
   }
+
+  func returnToSafeMode() {
+    interactionEnabled = false
+    safeMode = true
+  }
 }
