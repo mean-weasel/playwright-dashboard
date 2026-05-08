@@ -1,0 +1,254 @@
+name: Release macOS App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: CFBundleShortVersionString for the app bundle
+        required: true
+        type: string
+        default: 0.1.0
+      build_number:
+        description: Optional CFBundleVersion. Defaults to the GitHub run number.
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  notarized-app:
+    name: Sign, Notarize, and Package
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: apple-signing
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+
+      - name: Resolve release metadata
+        id: metadata
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+
+          BUILD_NUMBER="${INPUT_BUILD_NUMBER:-$GITHUB_RUN_NUMBER}"
+          ARTIFACT_NAME="PlaywrightDashboard-v${VERSION}-${BUILD_NUMBER}.zip"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          CERT_PATH="$RUNNER_TEMP/developer-id-application.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 -D > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build and sign Developer ID package
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_VERSION: ${{ steps.metadata.outputs.version }}
+          BUILD_NUMBER: ${{ steps.metadata.outputs.build_number }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application: .*(${APPLE_TEAM_ID})" \
+            | head -1 \
+            | sed -E 's/.*"(.+)"/\1/')"
+
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::Developer ID Application identity for team $APPLE_TEAM_ID not found"
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2
+            exit 1
+          fi
+
+          make developer-id-package \
+            APP_VERSION="$APP_VERSION" \
+            BUILD_NUMBER="$BUILD_NUMBER" \
+            DEVELOPER_ID_IDENTITY="$IDENTITY"
+
+          codesign --verify --deep --strict --verbose=2 dist/PlaywrightDashboard.app
+
+      - name: Notarize and staple app
+        timeout-minutes: 45
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          APP="dist/PlaywrightDashboard.app"
+          ZIP="dist/PlaywrightDashboard.zip"
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          SUBMIT_JSON="$RUNNER_TEMP/notary-submit.json"
+          INFO_JSON="$RUNNER_TEMP/notary-info.json"
+          LOG_JSON="$RUNNER_TEMP/notary-log.json"
+
+          echo "$APPLE_API_KEY_BASE64" | base64 -D > "$API_KEY_PATH"
+
+          notarytool_args=(
+            --key "$API_KEY_PATH"
+            --key-id "$APPLE_API_KEY_ID"
+            --issuer "$APPLE_API_ISSUER_ID"
+          )
+
+          rm -f "$ZIP"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+
+          xcrun notarytool submit "$ZIP" \
+            "${notarytool_args[@]}" \
+            --output-format json > "$SUBMIT_JSON"
+
+          SUBMISSION_ID="$(plutil -extract id raw -o - "$SUBMIT_JSON")"
+          if [ -z "$SUBMISSION_ID" ]; then
+            echo "::error::notarytool did not return a submission id"
+            cat "$SUBMIT_JSON"
+            exit 1
+          fi
+
+          echo "::notice title=Notarization submitted::Submission $SUBMISSION_ID"
+
+          STATUS="Unknown"
+          for attempt in $(seq 1 40); do
+            xcrun notarytool info "$SUBMISSION_ID" \
+              "${notarytool_args[@]}" \
+              --output-format json > "$INFO_JSON"
+
+            STATUS="$(plutil -extract status raw -o - "$INFO_JSON")"
+            echo "::notice title=Notarization status::Submission $SUBMISSION_ID is $STATUS (attempt $attempt/40)"
+
+            case "$STATUS" in
+              Accepted)
+                break
+                ;;
+              Invalid|Rejected)
+                echo "::error::Notarization failed with status $STATUS"
+                xcrun notarytool log "$SUBMISSION_ID" \
+                  "${notarytool_args[@]}" \
+                  --output-format json > "$LOG_JSON" || true
+                cat "$LOG_JSON"
+                exit 1
+                ;;
+            esac
+
+            sleep 60
+          done
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::error::Timed out waiting for notarization submission $SUBMISSION_ID; last status was $STATUS"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              "${notarytool_args[@]}" \
+              --output-format json > "$LOG_JSON" || true
+            cat "$LOG_JSON"
+            exit 1
+          fi
+
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
+
+          rm -f "$ZIP"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+
+      - name: Verify release package
+        env:
+          APP_VERSION: ${{ steps.metadata.outputs.version }}
+          BUILD_NUMBER: ${{ steps.metadata.outputs.build_number }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+
+          VERIFY_DIR="$RUNNER_TEMP/playwright-dashboard-release-verify"
+          INFO_PLIST="$VERIFY_DIR/PlaywrightDashboard.app/Contents/Info.plist"
+
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          ditto -x -k dist/PlaywrightDashboard.zip "$VERIFY_DIR"
+
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
+
+          if [ "$SHORT_VERSION" != "$APP_VERSION" ]; then
+            echo "::error::Expected CFBundleShortVersionString $APP_VERSION, got $SHORT_VERSION"
+            exit 1
+          fi
+
+          if [ "$BUNDLE_VERSION" != "$BUILD_NUMBER" ]; then
+            echo "::error::Expected CFBundleVersion $BUILD_NUMBER, got $BUNDLE_VERSION"
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/PlaywrightDashboard.app"
+          spctl --assess --type execute --verbose=4 "$VERIFY_DIR/PlaywrightDashboard.app"
+
+          cp dist/PlaywrightDashboard.zip "dist/$ARTIFACT_NAME"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: dist/${{ steps.metadata.outputs.artifact_name }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload artifact to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Notarized Playwright Dashboard release $GITHUB_REF_NAME."
+          fi
+
+          gh release upload "$GITHUB_REF_NAME" "dist/${{ steps.metadata.outputs.artifact_name }}" --clobber

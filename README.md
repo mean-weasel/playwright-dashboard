@@ -74,6 +74,21 @@ is not the one you want. The Developer ID Application certificate must be
 installed in the login keychain before this target can sign the app for
 notarization.
 
+CI notarized releases use the `Release macOS App` workflow and the
+`apple-signing` GitHub environment. Configure these repository or environment
+secrets:
+
+- `APPLE_CERTIFICATE_BASE64`: base64-encoded Developer ID Application `.p12`.
+- `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
+- `APPLE_TEAM_ID`: Apple Developer Team ID, for example `3CDYUL285D`.
+- `APPLE_API_KEY_BASE64`: base64-encoded App Store Connect API key `.p8`.
+- `APPLE_API_KEY_ID`: App Store Connect API key ID.
+- `APPLE_API_ISSUER_ID`: App Store Connect issuer ID.
+
+Run the workflow manually with a version and optional build number, or push a
+`v*` tag to build, sign, notarize, staple, verify, and upload
+`PlaywrightDashboard-v<version>-<build>.zip`.
+
 Install to `~/Applications` and launch it:
 
 ```sh

@@ -41,6 +41,31 @@ the zipped app. `make install` copies the app to
 Codesigning uses the first available developer signing identity. If none is
 found, the Makefile falls back to ad-hoc signing.
 
+## CI Signing And Notarization
+
+The `Release macOS App` GitHub Actions workflow signs and notarizes the app with
+Developer ID credentials. It runs manually from `workflow_dispatch` or
+automatically for `v*` tags, and uses the `apple-signing` environment.
+
+Required secrets:
+
+- `APPLE_CERTIFICATE_BASE64`: base64-encoded Developer ID Application `.p12`.
+- `APPLE_CERTIFICATE_PASSWORD`: password for the `.p12`.
+- `APPLE_TEAM_ID`: Apple Developer Team ID.
+- `APPLE_API_KEY_BASE64`: base64-encoded App Store Connect API key `.p8`.
+- `APPLE_API_KEY_ID`: App Store Connect API key ID.
+- `APPLE_API_ISSUER_ID`: App Store Connect issuer ID.
+
+The workflow imports the certificate into a temporary keychain, runs
+`make developer-id-package`, submits `dist/PlaywrightDashboard.zip` to
+notarization, staples the accepted ticket to `dist/PlaywrightDashboard.app`,
+re-creates the zip, verifies the bundle version and signature, and uploads the
+zip as an artifact. For a tag run, it also uploads the zip to the matching
+GitHub Release.
+
+Use the `Notary Status` workflow with a submission ID when you need to inspect a
+slow or failed Apple notarization outside the release job logs.
+
 ## Session Discovery Model
 
 The app discovers sessions from the Playwright daemon cache:
