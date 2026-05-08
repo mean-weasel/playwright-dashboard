@@ -67,7 +67,7 @@ signature, and creates `dist/PlaywrightDashboard.zip`.
 Create a local beta artifact after the standard QA gate:
 
 ```sh
-make beta-release APP_VERSION=0.1.0 BUILD_NUMBER=1
+make beta-release APP_VERSION=0.1.1 BUILD_NUMBER=1
 ```
 
 For a notarized external beta, configure an `xcrun notarytool` keychain profile
@@ -78,7 +78,7 @@ xcrun notarytool store-credentials playwright-dashboard \
   --team-id 3CDYUL285D
 
 make notarized-release \
-  APP_VERSION=0.1.0 \
+  APP_VERSION=0.1.1 \
   BUILD_NUMBER=1 \
   NOTARY_PROFILE=playwright-dashboard
 ```
