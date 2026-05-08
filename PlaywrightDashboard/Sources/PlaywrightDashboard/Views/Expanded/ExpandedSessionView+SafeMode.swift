@@ -23,4 +23,9 @@ extension ExpandedSessionView {
       }
     )
   }
+
+  func enableControlMode() {
+    interactionEnabled = true
+    safeMode = false
+  }
 }
