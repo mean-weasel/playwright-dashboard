@@ -8,6 +8,7 @@ enum DashboardSettings {
   static let expandedQualityKey = "expandedQuality"
   static let closedSessionRetentionHoursKey = "closedSessionRetentionHours"
   static let forceExpandedSnapshotFallbackKey = "forceExpandedSnapshotFallback"
+  static let safeModeKey = "safeMode"
 
   static func registrationDefaults() -> [String: Any] {
     [
@@ -18,6 +19,7 @@ enum DashboardSettings {
       expandedQualityKey: 60,
       closedSessionRetentionHoursKey: 24,
       forceExpandedSnapshotFallbackKey: false,
+      safeModeKey: false,
     ]
   }
 
@@ -51,5 +53,9 @@ enum DashboardSettings {
 
   static func forceExpandedSnapshotFallback(defaults: UserDefaults = .standard) -> Bool {
     defaults.bool(forKey: forceExpandedSnapshotFallbackKey)
+  }
+
+  static func safeMode(defaults: UserDefaults = .standard) -> Bool {
+    defaults.bool(forKey: safeModeKey)
   }
 }

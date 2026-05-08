@@ -11,6 +11,7 @@ struct SettingsView: View {
   @AppStorage(DashboardSettings.expandedQualityKey) private var expandedQuality = 60
   @AppStorage(DashboardSettings.closedSessionRetentionHoursKey) private
     var closedSessionRetentionHours = 24
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
   @AppStorage("launchAtLogin") private var launchAtLogin = false
 
   private let thresholdOptions: [(label: String, seconds: Int)] = [
@@ -82,6 +83,11 @@ struct SettingsView: View {
           Text(option.label).tag(option.hours)
         }
       }
+
+      Toggle("Safe read-only mode", isOn: $safeMode)
+        .help(
+          "Disables session close actions, cleanup, CDP inspector access, navigation, and browser input forwarding."
+        )
 
       LabeledContent("Playwright CLI") {
         HStack(spacing: 8) {

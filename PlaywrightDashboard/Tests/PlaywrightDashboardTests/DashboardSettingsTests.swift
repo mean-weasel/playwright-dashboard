@@ -53,4 +53,14 @@ struct DashboardSettingsTests {
     defaults.set(true, forKey: DashboardSettings.forceExpandedSnapshotFallbackKey)
     #expect(DashboardSettings.forceExpandedSnapshotFallback(defaults: defaults))
   }
+
+  @Test("safe mode defaults off and can be enabled")
+  func safeMode() {
+    let defaults = UserDefaults(suiteName: "DashboardSettingsTests-\(UUID().uuidString)")!
+
+    #expect(DashboardSettings.safeMode(defaults: defaults) == false)
+
+    defaults.set(true, forKey: DashboardSettings.safeModeKey)
+    #expect(DashboardSettings.safeMode(defaults: defaults))
+  }
 }

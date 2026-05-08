@@ -38,6 +38,10 @@ struct PlaywrightDashboardApp: App {
       smokeArguments.forcesSnapshotFallback,
       forKey: DashboardSettings.forceExpandedSnapshotFallbackKey
     )
+    UserDefaults.standard.set(
+      smokeArguments.enablesSafeMode,
+      forKey: DashboardSettings.safeModeKey
+    )
     if let sessionId = smokeArguments.selectedSessionId {
       state.selectedSessionId = sessionId
     }

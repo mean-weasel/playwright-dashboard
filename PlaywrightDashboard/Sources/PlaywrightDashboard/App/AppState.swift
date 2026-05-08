@@ -24,6 +24,7 @@ final class AppState {
   private let syncInterval: Duration
   private let sessionTerminator: SessionTerminator
   private let cliStatusProvider: PlaywrightCLIStatusProvider
+  let safeModeProvider: @MainActor () -> Bool
   let screenshotDirectoryProvider: @MainActor () -> URL
   let urlOpener: @MainActor (URL) -> Bool
   private let modelContextSaver: @MainActor (ModelContext?) throws -> Void
@@ -41,6 +42,7 @@ final class AppState {
     self.syncInterval = .seconds(2)
     self.sessionTerminator = SessionTerminator()
     self.cliStatusProvider = PlaywrightCLIStatusProvider()
+    self.safeModeProvider = { DashboardSettings.safeMode() }
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
     self.urlOpener = { NSWorkspace.shared.open($0) }
     self.modelContextSaver = Self.defaultModelContextSaver
@@ -54,6 +56,7 @@ final class AppState {
     self.syncInterval = .seconds(2)
     self.sessionTerminator = SessionTerminator()
     self.cliStatusProvider = PlaywrightCLIStatusProvider()
+    self.safeModeProvider = { DashboardSettings.safeMode() }
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
     self.urlOpener = { NSWorkspace.shared.open($0) }
     self.modelContextSaver = Self.defaultModelContextSaver
@@ -66,6 +69,7 @@ final class AppState {
     syncInterval: Duration = .seconds(2),
     sessionTerminator: SessionTerminator = SessionTerminator(),
     cliStatusProvider: PlaywrightCLIStatusProvider = PlaywrightCLIStatusProvider(),
+    safeModeProvider: @escaping @MainActor () -> Bool = { DashboardSettings.safeMode() },
     screenshotDirectoryProvider: @escaping @MainActor () -> URL =
       AppState.defaultScreenshotDirectory,
     urlOpener: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
@@ -79,6 +83,7 @@ final class AppState {
     self.syncInterval = syncInterval
     self.sessionTerminator = sessionTerminator
     self.cliStatusProvider = cliStatusProvider
+    self.safeModeProvider = safeModeProvider
     self.screenshotDirectoryProvider = screenshotDirectoryProvider
     self.urlOpener = urlOpener
     self.modelContextSaver = modelContextSaver
@@ -130,6 +135,7 @@ final class AppState {
   }
 
   func close(_ session: SessionRecord, byUser: Bool = true) {
+    guard !isSafeMode else { return }
     if selectedSessionId == session.sessionId {
       selectedSessionId = nil
     }
@@ -138,6 +144,7 @@ final class AppState {
   }
 
   func closeAndTerminate(_ session: SessionRecord) {
+    guard !isSafeMode else { return }
     beginTerminating(session)
     Task {
       await terminate(session)
@@ -145,6 +152,7 @@ final class AppState {
   }
 
   func retryTerminate(_ session: SessionRecord) {
+    guard !isSafeMode else { return }
     beginTerminating(session)
     Task {
       await terminate(session)
@@ -157,6 +165,7 @@ final class AppState {
   }
 
   func closeStaleSessions() {
+    guard !isSafeMode else { return }
     var didCloseSelectedSession = false
     for session in sessions where session.status == .stale {
       didCloseSelectedSession = didCloseSelectedSession || selectedSessionId == session.sessionId
@@ -169,6 +178,7 @@ final class AppState {
   }
 
   func closeAndTerminateStaleSessions() {
+    guard !isSafeMode else { return }
     let staleSessions = sessions.filter { $0.status == .stale }
     closeStaleSessions()
     for session in staleSessions {
@@ -286,14 +296,5 @@ final class AppState {
       sessionTerminationErrors[session.sessionId] = error.localizedDescription
       saveSessionChanges()
     }
-  }
-
-  private static func defaultScreenshotDirectory() -> URL {
-    FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-      ?? FileManager.default.temporaryDirectory
-  }
-
-  private static func defaultModelContextSaver(_ modelContext: ModelContext?) throws {
-    try modelContext?.save()
   }
 }
