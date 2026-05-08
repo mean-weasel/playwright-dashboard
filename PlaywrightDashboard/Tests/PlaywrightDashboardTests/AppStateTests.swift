@@ -74,7 +74,8 @@ struct AppStateTests {
     let appState = AppState(
       sessionFileProvider: { provider.files },
       shouldStartScreenshots: false,
-      syncInterval: .seconds(60)
+      syncInterval: .seconds(60),
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -139,7 +140,8 @@ struct AppStateTests {
     let appState = AppState(
       sessionFileProvider: { provider.files },
       shouldStartScreenshots: false,
-      syncInterval: .seconds(60)
+      syncInterval: .seconds(60),
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -168,7 +170,8 @@ struct AppStateTests {
     let appState = AppState(
       sessionFileProvider: { provider.files },
       shouldStartScreenshots: false,
-      syncInterval: .seconds(60)
+      syncInterval: .seconds(60),
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -219,7 +222,8 @@ struct AppStateTests {
       sessionTerminator: SessionTerminator { sessionId in
         await recorder.record(sessionId)
         return ProcessResult(exitStatus: 0, output: "")
-      }
+      },
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -287,7 +291,8 @@ struct AppStateTests {
       syncInterval: .seconds(60),
       sessionTerminator: SessionTerminator { _ in
         ProcessResult(exitStatus: 2, output: "missing session")
-      }
+      },
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -316,7 +321,8 @@ struct AppStateTests {
       syncInterval: .seconds(60),
       sessionTerminator: SessionTerminator { _ in
         ProcessResult(exitStatus: 2, output: "missing session")
-      }
+      },
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -343,7 +349,8 @@ struct AppStateTests {
       syncInterval: .seconds(60),
       sessionTerminator: SessionTerminator { _ in
         ProcessResult(exitStatus: 2, output: "missing session")
-      }
+      },
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -374,7 +381,8 @@ struct AppStateTests {
       syncInterval: .seconds(60),
       sessionTerminator: SessionTerminator { _ in
         ProcessResult(exitStatus: 2, output: "missing session")
-      }
+      },
+      safeModeProvider: { false }
     )
 
     appState.startSync(modelContext: harness.context)
@@ -463,6 +471,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
     appState.lastOpenURLError = "Previous error"
@@ -485,6 +494,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
     let session = SessionRecord(
@@ -506,6 +516,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
     appState.lastOpenURLError = "Previous error"
@@ -521,6 +532,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
 
@@ -534,6 +546,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
     let targets = [
@@ -595,6 +608,7 @@ struct AppStateTests {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
+      safeModeProvider: { false },
       urlOpener: opener.open
     )
     let session = SessionRecord(

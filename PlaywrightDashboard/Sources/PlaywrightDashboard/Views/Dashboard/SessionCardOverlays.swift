@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SessionCardActionOverlay: View {
   @Environment(AppState.self) private var appState
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
   let session: SessionRecord
   let showsActions: Bool
   let onRename: () -> Void

@@ -137,6 +137,8 @@ async function captureCase(testCase) {
     ];
     if (testCase.safeMode) {
       appArgs.push("--smoke-safe-mode");
+    } else {
+      appArgs.push("--smoke-disable-safe-mode");
     }
     if (testCase.dashboardFilter === "closed") {
       appArgs.push("--smoke-dashboard-filter-closed");
@@ -188,6 +190,8 @@ async function captureExpandedCase(testCase, tmpRoot, daemonDir) {
     ];
     if (testCase.safeMode) {
       appArgs.push("--smoke-safe-mode");
+    } else {
+      appArgs.push("--smoke-disable-safe-mode");
     }
     await run("open", appArgs);
 

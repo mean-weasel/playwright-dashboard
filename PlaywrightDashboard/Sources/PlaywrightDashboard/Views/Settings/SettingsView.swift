@@ -11,7 +11,7 @@ struct SettingsView: View {
   @AppStorage(DashboardSettings.expandedQualityKey) private var expandedQuality = 60
   @AppStorage(DashboardSettings.closedSessionRetentionHoursKey) private
     var closedSessionRetentionHours = 24
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
   @AppStorage("launchAtLogin") private var launchAtLogin = false
 
   private let thresholdOptions: [(label: String, seconds: Int)] = [

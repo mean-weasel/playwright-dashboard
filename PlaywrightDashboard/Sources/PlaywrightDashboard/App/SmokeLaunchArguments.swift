@@ -4,8 +4,8 @@ struct SmokeLaunchArguments {
   let usesInMemoryStore: Bool
   let opensDashboard: Bool
   let opensSettings: Bool
-  let forcesSnapshotFallback: Bool
-  let enablesSafeMode: Bool
+  let snapshotFallbackOverride: Bool?
+  let safeModeOverride: Bool?
   let disablesScreenshots: Bool
   let dashboardFilter: SidebarFilter?
   let daemonDirectory: URL?
@@ -16,8 +16,16 @@ struct SmokeLaunchArguments {
     self.usesInMemoryStore = arguments.contains("--smoke-in-memory-store")
     self.opensDashboard = arguments.contains("--smoke-open-dashboard")
     self.opensSettings = arguments.contains("--smoke-open-settings")
-    self.forcesSnapshotFallback = arguments.contains("--smoke-force-snapshot-fallback")
-    self.enablesSafeMode = arguments.contains("--smoke-safe-mode")
+    self.snapshotFallbackOverride =
+      arguments.contains("--smoke-force-snapshot-fallback") ? true : nil
+    self.safeModeOverride =
+      if arguments.contains("--smoke-safe-mode") {
+        true
+      } else if arguments.contains("--smoke-disable-safe-mode") {
+        false
+      } else {
+        nil
+      }
     self.disablesScreenshots = arguments.contains("--smoke-disable-screenshots")
     self.dashboardFilter =
       arguments.contains("--smoke-dashboard-filter-closed") ? .closed : .allOpen
