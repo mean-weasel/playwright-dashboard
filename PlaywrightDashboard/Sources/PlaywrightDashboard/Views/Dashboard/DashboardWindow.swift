@@ -2,9 +2,12 @@ import SwiftUI
 
 struct DashboardWindow: View {
   @Environment(AppState.self) private var appState
+  @Environment(\.openSettings) private var openSettings
   @State private var selectedFilter: SidebarFilter?
   @State private var searchText = ""
   @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
+  @AppStorage(DashboardSettings.safeModeOnboardingDismissedKey) private
+    var safeModeOnboardingDismissed = false
 
   init(initialFilter: SidebarFilter? = .allOpen) {
     _selectedFilter = State(initialValue: initialFilter)
@@ -27,9 +30,18 @@ struct DashboardWindow: View {
       }
 
       if safeMode && selectedSession == nil {
-        SafeModeBadge()
-          .padding(.top, 10)
-          .padding(.trailing, 14)
+        VStack(alignment: .trailing, spacing: 10) {
+          SafeModeBadge()
+
+          if !safeModeOnboardingDismissed {
+            SafeModeOnboardingBanner(
+              onOpenSettings: { openSettings() },
+              onDismiss: { safeModeOnboardingDismissed = true }
+            )
+          }
+        }
+        .padding(.top, 10)
+        .padding(.trailing, 14)
       }
     }
     .frame(minWidth: 900, minHeight: 550)

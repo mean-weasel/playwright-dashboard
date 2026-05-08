@@ -64,4 +64,15 @@ struct DashboardSettingsTests {
     defaults.set(false, forKey: DashboardSettings.safeModeKey)
     #expect(DashboardSettings.safeMode(defaults: defaults) == false)
   }
+
+  @Test("safe mode onboarding defaults visible and can be dismissed")
+  func safeModeOnboardingDismissal() {
+    let defaults = UserDefaults(suiteName: "DashboardSettingsTests-\(UUID().uuidString)")!
+    defaults.register(defaults: DashboardSettings.registrationDefaults())
+
+    #expect(DashboardSettings.safeModeOnboardingDismissed(defaults: defaults) == false)
+
+    defaults.set(true, forKey: DashboardSettings.safeModeOnboardingDismissedKey)
+    #expect(DashboardSettings.safeModeOnboardingDismissed(defaults: defaults))
+  }
 }
