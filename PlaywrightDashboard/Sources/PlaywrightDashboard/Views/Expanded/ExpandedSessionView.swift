@@ -10,7 +10,7 @@ struct ExpandedSessionView: View {
   var onBack: (() -> Void)?
   @AppStorage("expandedShowMetadata") private var showMetadata = true
   @AppStorage("expandedInteractionEnabled") var interactionEnabled = false
-  @AppStorage(DashboardSettings.safeModeKey) var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) var safeMode = true
   @State var consecutiveFailures = 0
   @State var pageConnection: CDPPageConnection?
   @State var fallbackInputClient: CDPClient?

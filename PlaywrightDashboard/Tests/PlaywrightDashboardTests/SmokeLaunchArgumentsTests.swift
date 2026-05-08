@@ -28,8 +28,8 @@ struct SmokeLaunchArgumentsTests {
     #expect(arguments.usesInMemoryStore)
     #expect(arguments.opensDashboard)
     #expect(arguments.opensSettings)
-    #expect(arguments.forcesSnapshotFallback)
-    #expect(arguments.enablesSafeMode)
+    #expect(arguments.snapshotFallbackOverride == true)
+    #expect(arguments.safeModeOverride == true)
     #expect(arguments.disablesScreenshots)
     #expect(arguments.dashboardFilter == .closed)
     #expect(arguments.daemonDirectory?.path == "/tmp/playwright-dashboard-daemon")
@@ -46,8 +46,8 @@ struct SmokeLaunchArgumentsTests {
     #expect(!arguments.usesInMemoryStore)
     #expect(!arguments.opensDashboard)
     #expect(!arguments.opensSettings)
-    #expect(!arguments.forcesSnapshotFallback)
-    #expect(!arguments.enablesSafeMode)
+    #expect(arguments.snapshotFallbackOverride == nil)
+    #expect(arguments.safeModeOverride == nil)
     #expect(!arguments.disablesScreenshots)
     #expect(arguments.dashboardFilter == .allOpen)
     #expect(arguments.daemonDirectory == nil)
@@ -65,5 +65,15 @@ struct SmokeLaunchArgumentsTests {
 
     #expect(arguments.daemonDirectory == nil)
     #expect(arguments.selectedSessionId == nil)
+  }
+
+  @Test("safe mode smoke flag can be explicitly disabled")
+  func safeModeSmokeFlagCanBeDisabled() {
+    let arguments = SmokeLaunchArguments(arguments: [
+      "PlaywrightDashboard",
+      "--smoke-disable-safe-mode",
+    ])
+
+    #expect(arguments.safeModeOverride == false)
   }
 }

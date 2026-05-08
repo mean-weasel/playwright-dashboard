@@ -19,7 +19,7 @@ enum DashboardSettings {
       expandedQualityKey: 60,
       closedSessionRetentionHoursKey: 24,
       forceExpandedSnapshotFallbackKey: false,
-      safeModeKey: false,
+      safeModeKey: true,
     ]
   }
 

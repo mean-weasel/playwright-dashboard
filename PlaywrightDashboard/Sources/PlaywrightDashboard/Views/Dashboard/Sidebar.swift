@@ -11,7 +11,7 @@ struct Sidebar: View {
   @Environment(AppState.self) private var appState
   @Binding var selectedFilter: SidebarFilter?
   @State private var showCleanupConfirmation = false
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
 
   var body: some View {
     List(selection: $selectedFilter) {

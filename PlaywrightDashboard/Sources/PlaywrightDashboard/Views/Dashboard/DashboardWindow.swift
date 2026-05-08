@@ -4,7 +4,7 @@ struct DashboardWindow: View {
   @Environment(AppState.self) private var appState
   @State private var selectedFilter: SidebarFilter?
   @State private var searchText = ""
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
 
   init(initialFilter: SidebarFilter? = .allOpen) {
     _selectedFilter = State(initialValue: initialFilter)

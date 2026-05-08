@@ -9,7 +9,7 @@ struct SessionCard: View {
   @State private var isHovered = false
   @FocusState private var isFocused: Bool
   @AppStorage("staleThresholdSeconds") private var staleThresholdSeconds = 120
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {

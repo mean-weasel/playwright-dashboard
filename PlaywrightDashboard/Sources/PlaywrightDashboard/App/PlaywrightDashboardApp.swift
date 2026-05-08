@@ -34,14 +34,18 @@ struct PlaywrightDashboardApp: App {
     }
     state.setPersistenceDegraded(creation.usedFallback)
     state.startSync(modelContext: container.mainContext)
-    UserDefaults.standard.set(
-      smokeArguments.forcesSnapshotFallback,
-      forKey: DashboardSettings.forceExpandedSnapshotFallbackKey
-    )
-    UserDefaults.standard.set(
-      smokeArguments.enablesSafeMode,
-      forKey: DashboardSettings.safeModeKey
-    )
+    if let snapshotFallbackOverride = smokeArguments.snapshotFallbackOverride {
+      UserDefaults.standard.set(
+        snapshotFallbackOverride,
+        forKey: DashboardSettings.forceExpandedSnapshotFallbackKey
+      )
+    }
+    if let safeModeOverride = smokeArguments.safeModeOverride {
+      UserDefaults.standard.set(
+        safeModeOverride,
+        forKey: DashboardSettings.safeModeKey
+      )
+    }
     if let sessionId = smokeArguments.selectedSessionId {
       state.selectedSessionId = sessionId
     }

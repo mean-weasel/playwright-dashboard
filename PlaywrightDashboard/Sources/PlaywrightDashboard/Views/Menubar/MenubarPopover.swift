@@ -12,7 +12,7 @@ struct MenubarPopover: View {
   @Environment(\.openWindow) private var openWindow
   @State private var listContentHeight: CGFloat = 0
   @AppStorage("popoverGroupByApp") private var groupByApp = true
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = true
 
   private let maxListHeight: CGFloat = 480
 
