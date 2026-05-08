@@ -62,6 +62,7 @@ struct ExpandedSessionView: View {
         onToggleRecording: toggleRecording,
         onExportRecording: exportLastRecording,
         onEnableControlMode: enableControlMode,
+        onReturnToSafeMode: returnToSafeMode,
         onDismissRecordingError: { recordingError = nil },
         onDismissRecordingExportError: { recordingExportError = nil },
         showMetadata: $showMetadata,

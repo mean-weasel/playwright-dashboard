@@ -138,6 +138,8 @@ When enabled, the dashboard, sidebar, menubar popover, and expanded session
 toolbar show a Safe badge.
 In the expanded session toolbar, choosing browser control while Safe mode is on
 requires confirmation before the app disables Safe mode and forwards input.
+After control is enabled, the same toolbar includes a Return to Safe Mode action
+that immediately stops input forwarding and blocks navigation again.
 
 ## Permissions
 
