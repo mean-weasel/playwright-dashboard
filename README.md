@@ -19,6 +19,20 @@ expanded session view backed by CDP screencast or screenshot fallback.
   `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`; set
   `CHROME_PATH` when using another location.
 
+## Download
+
+The latest notarized macOS build is available from
+[GitHub Releases](https://github.com/neonwatty/playwright-dashboard/releases/latest).
+
+Current release:
+
+- `PlaywrightDashboard-v0.1.0-2.zip`
+- SHA-256:
+  `a310178b71b73c07d3c9aef423662f3ea368f601f5d5845beccbc92c8d0dc6e6`
+
+The release artifact is Developer ID signed, notarized, stapled, and verified
+with Gatekeeper.
+
 ## Build And Test
 
 Use the Makefile from the repository root:
