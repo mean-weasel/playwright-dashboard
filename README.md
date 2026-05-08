@@ -136,6 +136,8 @@ available while disabling session close/cleanup, CDP inspector access, browser
 navigation, and forwarded click/scroll/keyboard input.
 When enabled, the dashboard, sidebar, menubar popover, and expanded session
 toolbar show a Safe badge.
+In the expanded session toolbar, choosing browser control while Safe mode is on
+requires confirmation before the app disables Safe mode and forwards input.
 
 ## Permissions
 

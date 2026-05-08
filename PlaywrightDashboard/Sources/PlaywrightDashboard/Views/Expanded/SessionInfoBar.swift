@@ -17,6 +17,7 @@ struct SessionInfoBar: View {
   let recordingExportError: String?
   let onToggleRecording: () -> Void
   let onExportRecording: () -> Void
+  let onEnableControlMode: () -> Void
   let onDismissRecordingError: () -> Void
   let onDismissRecordingExportError: () -> Void
   @Binding var showMetadata: Bool
@@ -28,6 +29,7 @@ struct SessionInfoBar: View {
   @State var navigationText = ""
   @State var isNavigating = false
   @State var navigationError: String?
+  @State var showsControlModeConfirmation = false
   @FocusState var isFieldFocused: Bool
   @FocusState var isURLFieldFocused: Bool
 
@@ -183,23 +185,7 @@ struct SessionInfoBar: View {
         .help("Open detached window")
       }
 
-      Picker(
-        "Interaction mode",
-        selection: Binding(
-          get: { interactionEnabled },
-          set: { interactionEnabled = $0 }
-        )
-      ) {
-        Label("View", systemImage: "eye").tag(false)
-        Label("Control", systemImage: "cursorarrow.click.2").tag(true)
-      }
-      .pickerStyle(.segmented)
-      .controlSize(.small)
-      .frame(width: 150)
-      .disabled(safeModeEnabled || session.cdpPort <= 0 || session.lastScreenshot == nil)
-      .accessibilityLabel("Browser interaction mode")
-      .accessibilityIdentifier("expanded-interaction-mode")
-      .help(interactionHelp)
+      controlModeControl
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -223,6 +209,20 @@ struct SessionInfoBar: View {
     .onChange(of: session.lastURL) {
       guard !isURLFieldFocused, !isNavigating else { return }
       syncNavigationText()
+    }
+    .confirmationDialog(
+      "Enable Control Mode?",
+      isPresented: $showsControlModeConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Enable Control Mode", role: .destructive) {
+        enableControlMode()
+      }
+      Button("Keep Safe Mode", role: .cancel) {}
+    } message: {
+      Text(
+        "Control mode disables Safe read-only mode and allows navigation, CDP inspector access, clicks, scrolling, and keyboard input to reach the browser."
+      )
     }
   }
 
