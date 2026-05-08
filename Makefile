@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -215,6 +215,15 @@ smoke-recording-export:
 	fi
 	$(MAKE) validate-package
 	scripts/smoke_recording_export.mjs
+
+smoke-multi-session:
+	@if [ "$$RUN_MULTI_SESSION_SMOKE" != "1" ]; then \
+		echo "Set RUN_MULTI_SESSION_SMOKE=1 to run the multi-session GUI smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
+	scripts/smoke_multi_session.mjs
 
 visual-snapshots:
 	$(MAKE) check-accessibility

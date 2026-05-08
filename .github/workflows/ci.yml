@@ -22,6 +22,7 @@ on:
           - live
           - fallback
           - recording
+          - multi
           - both
           - all
 
@@ -369,6 +370,42 @@ jobs:
           name: gui-smoke-recording-artifacts
           path: |
             dist/gui-smoke-recording-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+
+  gui-smoke-multi-session:
+    name: GUI Smoke Multi Session
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: [package-check]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-check.result == 'success' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.gui_smoke_mode == 'multi' || inputs.gui_smoke_mode == 'all')))
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for multi-session GUI smoke."
+            exit 1
+          fi
+      - name: Run multi-session smoke
+        env:
+          RUN_MULTI_SESSION_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-multi-session-artifacts
+        run: make smoke-multi-session
+      - name: Upload multi-session smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gui-smoke-multi-session-artifacts
+          path: |
+            dist/gui-smoke-multi-session-artifacts/**
             dist/PlaywrightDashboard.zip
           if-no-files-found: ignore
 

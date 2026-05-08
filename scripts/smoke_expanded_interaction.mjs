@@ -81,6 +81,7 @@ try {
     "--smoke-daemon-dir",
     daemonRoot,
     "--smoke-in-memory-store",
+    "--smoke-disable-safe-mode",
     "--smoke-session-id",
     sessionName,
   ];
