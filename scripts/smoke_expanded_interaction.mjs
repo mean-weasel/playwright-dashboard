@@ -30,14 +30,8 @@ await runGuiPreflight();
 const tmpRoot = await fsTempDir("playwright-dashboard-expanded-smoke-");
 const firstSurfaceShot = path.join(tmpRoot, "surface-before.png");
 const secondSurfaceShot = path.join(tmpRoot, "surface-after.png");
-const daemonDir = path.join(
-  os.homedir(),
-  "Library",
-  "Caches",
-  "ms-playwright",
-  "daemon",
-  `codex-expanded-interaction-${process.pid}`,
-);
+const daemonRoot = path.join(tmpRoot, "daemon");
+const daemonDir = path.join(daemonRoot, `codex-expanded-interaction-${process.pid}`);
 const sessionPath = path.join(daemonDir, `${sessionName}.session`);
 
 let chromeProcess;
@@ -84,6 +78,9 @@ try {
     appPath,
     "--args",
     "--smoke-open-dashboard",
+    "--smoke-daemon-dir",
+    daemonRoot,
+    "--smoke-in-memory-store",
     "--smoke-session-id",
     sessionName,
   ];
