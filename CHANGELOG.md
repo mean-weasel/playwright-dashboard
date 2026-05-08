@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 - Unreleased
+## 0.1.1 - 2026-05-08
 
 - Safe read-only mode now defaults on for new installs.
 - Normal app launches no longer overwrite persisted Safe mode settings from
