@@ -26,9 +26,9 @@ The latest notarized macOS build is available from
 
 Current release:
 
-- `PlaywrightDashboard-v0.1.0-2.zip`
+- `PlaywrightDashboard-v0.1.1-3.zip`
 - SHA-256:
-  `a310178b71b73c07d3c9aef423662f3ea368f601f5d5845beccbc92c8d0dc6e6`
+  `8540c9ceeb5b81bf90c81d6e33d7de4424cd34081111cd8c25bb08dbc6978580`
 
 The release artifact is Developer ID signed, notarized, stapled, and verified
 with Gatekeeper.
