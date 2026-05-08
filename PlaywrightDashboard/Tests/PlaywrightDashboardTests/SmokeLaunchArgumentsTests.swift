@@ -14,6 +14,7 @@ struct SmokeLaunchArgumentsTests {
       "--smoke-open-dashboard",
       "--smoke-open-settings",
       "--smoke-force-snapshot-fallback",
+      "--smoke-safe-mode",
       "--smoke-disable-screenshots",
       "--smoke-dashboard-filter-closed",
       "--smoke-daemon-dir",
@@ -28,6 +29,7 @@ struct SmokeLaunchArgumentsTests {
     #expect(arguments.opensDashboard)
     #expect(arguments.opensSettings)
     #expect(arguments.forcesSnapshotFallback)
+    #expect(arguments.enablesSafeMode)
     #expect(arguments.disablesScreenshots)
     #expect(arguments.dashboardFilter == .closed)
     #expect(arguments.daemonDirectory?.path == "/tmp/playwright-dashboard-daemon")
@@ -45,6 +47,7 @@ struct SmokeLaunchArgumentsTests {
     #expect(!arguments.opensDashboard)
     #expect(!arguments.opensSettings)
     #expect(!arguments.forcesSnapshotFallback)
+    #expect(!arguments.enablesSafeMode)
     #expect(!arguments.disablesScreenshots)
     #expect(arguments.dashboardFilter == .allOpen)
     #expect(arguments.daemonDirectory == nil)

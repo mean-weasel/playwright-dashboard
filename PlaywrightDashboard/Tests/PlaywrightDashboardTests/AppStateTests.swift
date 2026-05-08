@@ -237,6 +237,44 @@ struct AppStateTests {
     #expect(appState.sessionTerminationErrors["close-me"] == nil)
   }
 
+  @Test("safe mode blocks session close and cleanup commands")
+  func safeModeBlocksSessionCloseAndCleanupCommands() async throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(name: "close-me", workspace: harness.workspace("close-me")),
+      try harness.writeSession(name: "stale-me", workspace: harness.workspace("stale-me")),
+    ])
+    let recorder = CommandRecorder()
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      sessionTerminator: SessionTerminator { sessionId in
+        await recorder.record(sessionId)
+        return ProcessResult(exitStatus: 0, output: "")
+      },
+      safeModeProvider: { true }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    let closeMe = try #require(appState.sessions.first { $0.sessionId == "close-me" })
+    let staleMe = try #require(appState.sessions.first { $0.sessionId == "stale-me" })
+    staleMe.status = .stale
+    appState.selectedSessionId = closeMe.sessionId
+
+    appState.close(closeMe, byUser: true)
+    appState.closeAndTerminate(closeMe)
+    appState.retryTerminate(closeMe)
+    appState.closeStaleSessions()
+    appState.closeAndTerminateStaleSessions()
+    try await Task.sleep(for: .milliseconds(50))
+
+    #expect(closeMe.status != .closed)
+    #expect(staleMe.status == .stale)
+    #expect(appState.selectedSessionId == closeMe.sessionId)
+    #expect(await recorder.commands.isEmpty)
+  }
+
   @Test("closeAndTerminate records terminator errors")
   func closeAndTerminateRecordsErrors() async throws {
     let harness = try TestSessionHarness()
@@ -529,6 +567,27 @@ struct AppStateTests {
       opener.urls.map(\.absoluteString) == [
         "http://localhost:9333/devtools/inspector.html?ws=localhost:9333/devtools/page/page-2"
       ])
+  }
+
+  @Test("safe mode blocks CDP inspector URLs")
+  func safeModeBlocksCDPInspectorURLs() {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      safeModeProvider: { true },
+      urlOpener: opener.open
+    )
+    let session = SessionRecord(
+      sessionId: "cdp",
+      autoLabel: "CDP",
+      workspaceDir: "/tmp/cdp",
+      cdpPort: 9333,
+      socketPath: "/tmp/cdp.sock"
+    )
+
+    #expect(appState.openCDPInspector(session) == false)
+    #expect(opener.urls.isEmpty)
+    #expect(appState.lastOpenURLError == "Safe mode is enabled. CDP inspector access is disabled.")
   }
 
   @Test("openCDPInspector falls back to port URL when selected target has no id")

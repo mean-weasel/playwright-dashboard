@@ -38,6 +38,29 @@ export const cases = [
     ],
   },
   {
+    name: "safe-mode-dashboard",
+    window: "dashboard",
+    expectedElement: "safe-mode-badge",
+    safeMode: true,
+    assertions: {
+      identifiers: [
+        "safe-mode-badge",
+        "sidebar-safe-mode-badge",
+        "session-card-thumbnail-state-visual-safe-active",
+        "session-card-thumbnail-state-visual-safe-stale",
+        "session-card-visual-safe-stale",
+      ],
+      names: ["Safe"],
+      identifierPrefixes: {
+        "session-card-visual-safe-": 2,
+      },
+    },
+    sessions: [
+      sessionFixture("visual-safe-active", "Visual Safe Active", "safe-active", 9222),
+      sessionFixture("visual-safe-stale", "Visual Safe Stale", "safe-stale", 0),
+    ],
+  },
+  {
     name: "settings",
     window: "settings",
     expectedElement: "settings-view",

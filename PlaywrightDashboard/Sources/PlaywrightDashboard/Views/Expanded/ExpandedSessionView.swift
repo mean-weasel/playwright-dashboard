@@ -3,6 +3,12 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "PlaywrightDashboard", category: "ExpandedSessionView")
 
+private struct SafeModeBlockedError: LocalizedError {
+  var errorDescription: String? {
+    "Safe mode is enabled. Browser navigation and input forwarding are disabled."
+  }
+}
+
 struct ExpandedSessionView: View {
   @Environment(AppState.self) var appState
   @Environment(\.openWindow) var openWindow
@@ -10,6 +16,7 @@ struct ExpandedSessionView: View {
   var onBack: (() -> Void)?
   @AppStorage("expandedShowMetadata") private var showMetadata = true
   @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
   @State var consecutiveFailures = 0
   @State var pageConnection: CDPPageConnection?
   @State var fallbackInputClient: CDPClient?
@@ -63,7 +70,8 @@ struct ExpandedSessionView: View {
         onDismissRecordingError: { recordingError = nil },
         onDismissRecordingExportError: { recordingExportError = nil },
         showMetadata: $showMetadata,
-        interactionEnabled: $interactionEnabled,
+        interactionEnabled: interactionModeBinding,
+        safeModeEnabled: safeMode,
         connectionSummary: connectionSummary
       )
 
@@ -103,7 +111,7 @@ struct ExpandedSessionView: View {
         ZStack(alignment: .topTrailing) {
           InteractiveScreenshotSurface(
             image: nsImage,
-            interactionEnabled: interactionEnabled,
+            interactionEnabled: effectiveInteractionEnabled,
             onClick: dispatchClick,
             onScroll: dispatchScroll,
             onKeyPress: dispatchKeyPress
@@ -127,7 +135,7 @@ struct ExpandedSessionView: View {
     VStack(alignment: .trailing, spacing: 6) {
       ExpandedRefreshBadge(frameMode: frameMode)
 
-      if interactionEnabled {
+      if effectiveInteractionEnabled {
         ExpandedInteractionBadge()
       }
 
@@ -146,7 +154,7 @@ struct ExpandedSessionView: View {
   }
 
   private func dispatchClick(_ point: CGPoint) {
-    guard interactionEnabled, session.cdpPort > 0 else { return }
+    guard effectiveInteractionEnabled, session.cdpPort > 0 else { return }
     noteLocalInteraction()
     Task {
       do {
@@ -167,7 +175,7 @@ struct ExpandedSessionView: View {
   }
 
   private func dispatchScroll(_ point: CGPoint, deltaX: CGFloat, deltaY: CGFloat) {
-    guard interactionEnabled, session.cdpPort > 0 else { return }
+    guard effectiveInteractionEnabled, session.cdpPort > 0 else { return }
     noteLocalInteraction()
     Task {
       do {
@@ -195,7 +203,7 @@ struct ExpandedSessionView: View {
   }
 
   private func dispatchKeyPress(_ input: CDPClient.KeyEventInput) {
-    guard interactionEnabled, session.cdpPort > 0 else { return }
+    guard effectiveInteractionEnabled, session.cdpPort > 0 else { return }
     noteLocalInteraction()
     Task {
       do {
@@ -215,6 +223,9 @@ struct ExpandedSessionView: View {
   }
 
   private func navigate(to rawURL: String) async throws -> String {
+    guard !appState.isSafeMode else {
+      throw SafeModeBlockedError()
+    }
     guard session.cdpPort > 0 else {
       throw CDPClient.CDPError.noPages
     }
@@ -248,13 +259,30 @@ struct ExpandedSessionView: View {
     lastLocalInteractionAt = Date()
   }
 
+  private var effectiveInteractionEnabled: Bool {
+    interactionEnabled && !safeMode
+  }
+
+  private var interactionModeBinding: Binding<Bool> {
+    Binding(
+      get: { interactionEnabled && !safeMode },
+      set: { newValue in
+        guard !safeMode else {
+          interactionEnabled = false
+          return
+        }
+        interactionEnabled = newValue
+      }
+    )
+  }
+
   func detectAgentActivityIfNeeded(
     previous: CDPClient.ScreenshotResult?,
     new: CDPClient.ScreenshotResult
   ) {
     guard
       ExpandedAgentActivityHeuristic.shouldShowWarning(
-        interactionEnabled: interactionEnabled,
+        interactionEnabled: effectiveInteractionEnabled,
         previousURL: previous?.url,
         previousTitle: previous?.title,
         newURL: new.url,

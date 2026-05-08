@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SessionCardActionOverlay: View {
   @Environment(AppState.self) private var appState
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
   let session: SessionRecord
   let showsActions: Bool
   let onRename: () -> Void
@@ -28,7 +29,8 @@ struct SessionCardActionOverlay: View {
         systemImage: "network",
         label: "Open CDP inspector",
         identifier: "session-card-open-cdp-\(session.sessionId)",
-        isDisabled: session.cdpPort <= 0
+        isDisabled: session.cdpPort <= 0 || safeMode,
+        disabledHelp: safeMode ? "Safe mode disables CDP inspector access." : nil
       ) {
         appState.openCDPInspector(session)
       }
@@ -47,7 +49,8 @@ struct SessionCardActionOverlay: View {
           label: "Close session",
           identifier: "session-card-close-\(session.sessionId)",
           role: .destructive,
-          isDisabled: session.status == .closing
+          isDisabled: session.status == .closing || safeMode,
+          disabledHelp: safeMode ? "Safe mode disables session close actions." : nil
         ) {
           appState.closeAndTerminate(session)
         }
@@ -57,7 +60,9 @@ struct SessionCardActionOverlay: View {
         cardActionButton(
           systemImage: "arrow.clockwise.circle",
           label: "Retry close",
-          identifier: "session-card-retry-close-\(session.sessionId)"
+          identifier: "session-card-retry-close-\(session.sessionId)",
+          isDisabled: safeMode,
+          disabledHelp: safeMode ? "Safe mode disables session close actions." : nil
         ) {
           appState.retryTerminate(session)
         }
@@ -85,6 +90,7 @@ struct SessionCardActionOverlay: View {
     identifier: String,
     role: ButtonRole? = nil,
     isDisabled: Bool = false,
+    disabledHelp: String? = nil,
     action: @escaping () -> Void
   ) -> some View {
     Button(role: role, action: action) {
@@ -98,7 +104,7 @@ struct SessionCardActionOverlay: View {
     .opacity(isDisabled ? 0.45 : 1)
     .accessibilityLabel(label)
     .accessibilityIdentifier(identifier)
-    .help(label)
+    .help(isDisabled ? disabledHelp ?? label : label)
   }
 
   private var canOpenCurrentURL: Bool {

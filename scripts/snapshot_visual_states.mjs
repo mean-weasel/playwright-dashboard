@@ -135,6 +135,9 @@ async function captureCase(testCase) {
       "--smoke-in-memory-store",
       "--smoke-disable-screenshots",
     ];
+    if (testCase.safeMode) {
+      appArgs.push("--smoke-safe-mode");
+    }
     if (testCase.dashboardFilter === "closed") {
       appArgs.push("--smoke-dashboard-filter-closed");
     }
@@ -173,7 +176,7 @@ async function captureExpandedCase(testCase, tmpRoot, daemonDir) {
       sessionFixture(sessionName, "Visual Expanded", "expanded-worktree", fixture.debugPort),
     ]);
     await quitApp();
-    await run("open", [
+    const appArgs = [
       appPath,
       "--args",
       "--smoke-open-dashboard",
@@ -182,7 +185,11 @@ async function captureExpandedCase(testCase, tmpRoot, daemonDir) {
       "--smoke-in-memory-store",
       "--smoke-session-id",
       sessionName,
-    ]);
+    ];
+    if (testCase.safeMode) {
+      appArgs.push("--smoke-safe-mode");
+    }
+    await run("open", appArgs);
 
     await runAppleScript(waitForWindowScript(testCase.expectedElement));
     await sleep(1_500);

@@ -11,6 +11,7 @@ struct Sidebar: View {
   @Environment(AppState.self) private var appState
   @Binding var selectedFilter: SidebarFilter?
   @State private var showCleanupConfirmation = false
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
 
   var body: some View {
     List(selection: $selectedFilter) {
@@ -56,6 +57,11 @@ struct Sidebar: View {
       }
 
       Section("Status") {
+        if safeMode {
+          SafeModeBadge(compact: true)
+            .accessibilityIdentifier("sidebar-safe-mode-badge")
+        }
+
         sidebarRow(
           filter: .allOpen,
           title: "All Open",
@@ -176,6 +182,8 @@ struct Sidebar: View {
               .foregroundStyle(.orange)
           }
           .buttonStyle(.plain)
+          .disabled(safeMode)
+          .help(safeMode ? "Safe mode disables stale-session cleanup." : "Close stale sessions.")
           .confirmationDialog(
             "Close \(staleCount) stale sessions?",
             isPresented: $showCleanupConfirmation,

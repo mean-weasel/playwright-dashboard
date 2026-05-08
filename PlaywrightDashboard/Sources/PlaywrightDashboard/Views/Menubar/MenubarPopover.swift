@@ -12,6 +12,7 @@ struct MenubarPopover: View {
   @Environment(\.openWindow) private var openWindow
   @State private var listContentHeight: CGFloat = 0
   @AppStorage("popoverGroupByApp") private var groupByApp = true
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
 
   private let maxListHeight: CGFloat = 480
 
@@ -63,6 +64,10 @@ struct MenubarPopover: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+        if safeMode {
+          SafeModeBadge(compact: true)
+            .accessibilityIdentifier("menubar-safe-mode-badge")
+        }
         Spacer()
         if !staleSessions.isEmpty {
           Button {
@@ -72,7 +77,9 @@ struct MenubarPopover: View {
               .font(.caption)
           }
           .buttonStyle(.plain)
+          .disabled(safeMode)
           .foregroundStyle(.blue)
+          .help(safeMode ? "Safe mode disables stale-session cleanup." : "Close stale sessions.")
         }
       }
 

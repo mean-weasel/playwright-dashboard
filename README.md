@@ -129,6 +129,13 @@ Session discovery is local-only:
 If no daemon directory exists yet, the watcher waits and retries until
 Playwright creates one.
 
+Enable Safe read-only mode in Settings when observing active sessions that
+should not be disrupted. It keeps discovery, thumbnails, live frames, metadata,
+and screenshot saving available while disabling session close/cleanup, CDP
+inspector access, browser navigation, and forwarded click/scroll/keyboard input.
+When enabled, the dashboard, sidebar, menubar popover, and expanded session
+toolbar show a Safe badge.
+
 ## Permissions
 
 Normal app use does not require the GUI smoke-test Accessibility setup. GUI QA

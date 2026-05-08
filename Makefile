@@ -225,7 +225,7 @@ visual-structure-smoke:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	VISUAL_SNAPSHOT_STRUCTURE_ONLY=1 \
-		VISUAL_SNAPSHOT_CASES=empty-dashboard,populated-dashboard,settings,closed-history \
+		VISUAL_SNAPSHOT_CASES=empty-dashboard,populated-dashboard,safe-mode-dashboard,settings,closed-history \
 		VISUAL_SNAPSHOT_DIR=$(DIST_DIR)/visual-structure-smoke \
 		scripts/snapshot_visual_states.mjs
 

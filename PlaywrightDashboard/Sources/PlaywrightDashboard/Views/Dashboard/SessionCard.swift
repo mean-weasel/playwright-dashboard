@@ -9,6 +9,7 @@ struct SessionCard: View {
   @State private var isHovered = false
   @FocusState private var isFocused: Bool
   @AppStorage("staleThresholdSeconds") private var staleThresholdSeconds = 120
+  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -101,6 +102,8 @@ struct SessionCard: View {
         Button("Close Session", role: .destructive) {
           appState.closeAndTerminate(session)
         }
+        .disabled(safeMode)
+        .help(safeMode ? "Safe mode disables session close actions." : "Close session")
       }
 
       if appState.sessionTerminationErrors[session.sessionId] != nil {
@@ -108,6 +111,8 @@ struct SessionCard: View {
         Button("Retry Close") {
           appState.retryTerminate(session)
         }
+        .disabled(safeMode)
+        .help(safeMode ? "Safe mode disables session close actions." : "Retry close")
         Button("Dismiss Close Error") {
           appState.dismissTerminationError(sessionId: session.sessionId)
         }

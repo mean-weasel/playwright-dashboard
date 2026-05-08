@@ -19,6 +19,11 @@ extension AppState {
 
   @discardableResult
   func openCDPInspector(_ session: SessionRecord) -> Bool {
+    guard !isSafeMode else {
+      lastOpenURLError = "Safe mode is enabled. CDP inspector access is disabled."
+      return false
+    }
+
     guard session.cdpPort > 0 else {
       lastOpenURLError = "No CDP inspector URL is available."
       return false

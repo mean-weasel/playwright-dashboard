@@ -21,6 +21,7 @@ struct SessionInfoBar: View {
   let onDismissRecordingExportError: () -> Void
   @Binding var showMetadata: Bool
   @Binding var interactionEnabled: Bool
+  let safeModeEnabled: Bool
   let connectionSummary: ExpandedConnectionSummary
   @State private var isEditing = false
   @State private var editText = ""
@@ -72,6 +73,11 @@ struct SessionInfoBar: View {
       Spacer()
 
       navigationControl
+
+      if safeModeEnabled {
+        SafeModeBadge(compact: true)
+          .accessibilityIdentifier("expanded-safe-mode-badge")
+      }
 
       connectionSummary
 
@@ -136,10 +142,10 @@ struct SessionInfoBar: View {
           .font(.body)
       }
       .buttonStyle(.plain)
-      .disabled(session.cdpPort <= 0)
+      .disabled(session.cdpPort <= 0 || safeModeEnabled)
       .accessibilityLabel("Open CDP inspector")
       .accessibilityIdentifier("expanded-open-cdp-inspector")
-      .help("Open CDP inspector")
+      .help(safeModeEnabled ? "Safe mode disables CDP inspector access." : "Open CDP inspector")
 
       Button(action: onToggleRecording) {
         if isFinishingRecording {
@@ -190,13 +196,10 @@ struct SessionInfoBar: View {
       .pickerStyle(.segmented)
       .controlSize(.small)
       .frame(width: 150)
-      .disabled(session.cdpPort <= 0 || session.lastScreenshot == nil)
+      .disabled(safeModeEnabled || session.cdpPort <= 0 || session.lastScreenshot == nil)
       .accessibilityLabel("Browser interaction mode")
       .accessibilityIdentifier("expanded-interaction-mode")
-      .help(
-        interactionEnabled
-          ? "Click, scroll, and keyboard input are forwarded to the browser surface."
-          : "Browser frames are view-only; input is not forwarded.")
+      .help(interactionHelp)
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -239,7 +242,7 @@ struct SessionInfoBar: View {
         .onSubmit {
           beginNavigation()
         }
-        .disabled(session.cdpPort <= 0 || isNavigating)
+        .disabled(safeModeEnabled || session.cdpPort <= 0 || isNavigating)
         .accessibilityLabel("Navigate URL")
         .accessibilityIdentifier("expanded-navigate-url-field")
 
@@ -257,12 +260,12 @@ struct SessionInfoBar: View {
       }
       .buttonStyle(.plain)
       .disabled(
-        session.cdpPort <= 0 || isNavigating
+        safeModeEnabled || session.cdpPort <= 0 || isNavigating
           || navigationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       )
       .accessibilityLabel("Navigate")
       .accessibilityIdentifier("expanded-navigate-url-button")
-      .help("Navigate current page")
+      .help(safeModeEnabled ? "Safe mode disables browser navigation." : "Navigate current page")
     }
   }
 
@@ -280,8 +283,18 @@ struct SessionInfoBar: View {
     return "Recording is available while live screencast is active."
   }
 
+  private var interactionHelp: String {
+    if safeModeEnabled {
+      return "Safe mode keeps browser frames view-only."
+    }
+    if interactionEnabled {
+      return "Click, scroll, and keyboard input are forwarded to the browser surface."
+    }
+    return "Browser frames are view-only; input is not forwarded."
+  }
+
   private func beginNavigation() {
-    guard !isNavigating else { return }
+    guard !safeModeEnabled, !isNavigating else { return }
     let requestedURL = navigationText
     isNavigating = true
     navigationError = nil
