@@ -24,7 +24,7 @@ final class AppState {
   private let syncInterval: Duration
   private let sessionTerminator: SessionTerminator
   private let cliStatusProvider: PlaywrightCLIStatusProvider
-  private let safeModeProvider: @MainActor () -> Bool
+  let safeModeProvider: @MainActor () -> Bool
   let screenshotDirectoryProvider: @MainActor () -> URL
   let urlOpener: @MainActor (URL) -> Bool
   private let modelContextSaver: @MainActor (ModelContext?) throws -> Void
@@ -87,10 +87,6 @@ final class AppState {
     self.screenshotDirectoryProvider = screenshotDirectoryProvider
     self.urlOpener = urlOpener
     self.modelContextSaver = modelContextSaver
-  }
-
-  var isSafeMode: Bool {
-    safeModeProvider()
   }
 
   /// Call once from a view that has access to the ModelContext.
@@ -300,14 +296,5 @@ final class AppState {
       sessionTerminationErrors[session.sessionId] = error.localizedDescription
       saveSessionChanges()
     }
-  }
-
-  private static func defaultScreenshotDirectory() -> URL {
-    FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-      ?? FileManager.default.temporaryDirectory
-  }
-
-  private static func defaultModelContextSaver(_ modelContext: ModelContext?) throws {
-    try modelContext?.save()
   }
 }

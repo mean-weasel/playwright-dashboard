@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SessionInfoBar: View {
-  @Environment(AppState.self) private var appState
+  @Environment(AppState.self) var appState
   let session: SessionRecord
   let onBack: () -> Void
   let onDetach: (() -> Void)?
@@ -23,13 +23,13 @@ struct SessionInfoBar: View {
   @Binding var interactionEnabled: Bool
   let safeModeEnabled: Bool
   let connectionSummary: ExpandedConnectionSummary
-  @State private var isEditing = false
-  @State private var editText = ""
-  @State private var navigationText = ""
-  @State private var isNavigating = false
-  @State private var navigationError: String?
-  @FocusState private var isFieldFocused: Bool
-  @FocusState private var isURLFieldFocused: Bool
+  @State var isEditing = false
+  @State var editText = ""
+  @State var navigationText = ""
+  @State var isNavigating = false
+  @State var navigationError: String?
+  @FocusState var isFieldFocused: Bool
+  @FocusState var isURLFieldFocused: Bool
 
   var body: some View {
     HStack(spacing: 12) {
@@ -223,90 +223,6 @@ struct SessionInfoBar: View {
     .onChange(of: session.lastURL) {
       guard !isURLFieldFocused, !isNavigating else { return }
       syncNavigationText()
-    }
-  }
-
-  private func commitRename() {
-    appState.rename(session, to: editText)
-    isEditing = false
-  }
-
-  private var navigationControl: some View {
-    HStack(spacing: 6) {
-      TextField("URL", text: $navigationText)
-        .textFieldStyle(.roundedBorder)
-        .controlSize(.small)
-        .font(.caption)
-        .frame(width: 280)
-        .focused($isURLFieldFocused)
-        .onSubmit {
-          beginNavigation()
-        }
-        .disabled(safeModeEnabled || session.cdpPort <= 0 || isNavigating)
-        .accessibilityLabel("Navigate URL")
-        .accessibilityIdentifier("expanded-navigate-url-field")
-
-      Button {
-        beginNavigation()
-      } label: {
-        if isNavigating {
-          ProgressView()
-            .controlSize(.small)
-            .frame(width: 14, height: 14)
-        } else {
-          Image(systemName: "arrow.right.circle")
-            .font(.body)
-        }
-      }
-      .buttonStyle(.plain)
-      .disabled(
-        safeModeEnabled || session.cdpPort <= 0 || isNavigating
-          || navigationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      )
-      .accessibilityLabel("Navigate")
-      .accessibilityIdentifier("expanded-navigate-url-button")
-      .help(safeModeEnabled ? "Safe mode disables browser navigation." : "Navigate current page")
-    }
-  }
-
-  private func syncNavigationText() {
-    navigationText = session.lastURL.flatMap { $0.isEmpty ? nil : $0 } ?? ""
-  }
-
-  private var recordingHelp: String {
-    if isRecording {
-      return "Stop recording. \(recordingFrameCount) frames captured."
-    }
-    if canRecord {
-      return "Record live screencast frames."
-    }
-    return "Recording is available while live screencast is active."
-  }
-
-  private var interactionHelp: String {
-    if safeModeEnabled {
-      return "Safe mode keeps browser frames view-only."
-    }
-    if interactionEnabled {
-      return "Click, scroll, and keyboard input are forwarded to the browser surface."
-    }
-    return "Browser frames are view-only; input is not forwarded."
-  }
-
-  private func beginNavigation() {
-    guard !safeModeEnabled, !isNavigating else { return }
-    let requestedURL = navigationText
-    isNavigating = true
-    navigationError = nil
-    Task {
-      do {
-        let normalizedURL = try await onNavigate(requestedURL)
-        navigationText = normalizedURL
-        isURLFieldFocused = false
-      } catch {
-        navigationError = error.localizedDescription
-      }
-      isNavigating = false
     }
   }
 

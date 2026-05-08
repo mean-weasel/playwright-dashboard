@@ -3,20 +3,14 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "PlaywrightDashboard", category: "ExpandedSessionView")
 
-private struct SafeModeBlockedError: LocalizedError {
-  var errorDescription: String? {
-    "Safe mode is enabled. Browser navigation and input forwarding are disabled."
-  }
-}
-
 struct ExpandedSessionView: View {
   @Environment(AppState.self) var appState
   @Environment(\.openWindow) var openWindow
   let session: SessionRecord
   var onBack: (() -> Void)?
   @AppStorage("expandedShowMetadata") private var showMetadata = true
-  @AppStorage("expandedInteractionEnabled") private var interactionEnabled = false
-  @AppStorage(DashboardSettings.safeModeKey) private var safeMode = false
+  @AppStorage("expandedInteractionEnabled") var interactionEnabled = false
+  @AppStorage(DashboardSettings.safeModeKey) var safeMode = false
   @State var consecutiveFailures = 0
   @State var pageConnection: CDPPageConnection?
   @State var fallbackInputClient: CDPClient?
@@ -257,23 +251,6 @@ struct ExpandedSessionView: View {
 
   private func noteLocalInteraction() {
     lastLocalInteractionAt = Date()
-  }
-
-  private var effectiveInteractionEnabled: Bool {
-    interactionEnabled && !safeMode
-  }
-
-  private var interactionModeBinding: Binding<Bool> {
-    Binding(
-      get: { interactionEnabled && !safeMode },
-      set: { newValue in
-        guard !safeMode else {
-          interactionEnabled = false
-          return
-        }
-        interactionEnabled = newValue
-      }
-    )
   }
 
   func detectAgentActivityIfNeeded(
