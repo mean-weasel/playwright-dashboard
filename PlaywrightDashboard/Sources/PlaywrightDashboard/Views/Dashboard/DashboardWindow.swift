@@ -45,10 +45,31 @@ struct DashboardWindow: View {
       }
     }
     .frame(minWidth: 900, minHeight: 550)
+    .onAppear {
+      reportSmokeDashboardReadiness()
+    }
+    .onChange(of: safeMode) {
+      reportSmokeDashboardReadiness()
+    }
+    .onChange(of: dashboardReadinessSignature) {
+      reportSmokeDashboardReadiness()
+    }
   }
 
   private var selectedSession: SessionRecord? {
     guard let selectedId = appState.selectedSessionId else { return nil }
     return appState.sessions.first(where: { $0.sessionId == selectedId })
+  }
+
+  private var dashboardReadinessSignature: String {
+    let sessionSignature = appState.sessions
+      .map { "\($0.sessionId):\($0.displayName):\($0.status.rawValue):\($0.lastURL ?? "")" }
+      .sorted()
+      .joined(separator: "|")
+    return "\(appState.selectedSessionId ?? "")|\(sessionSignature)"
+  }
+
+  private func reportSmokeDashboardReadiness() {
+    SmokeReadinessReporter.writeDashboard(appState: appState, safeMode: safeMode)
   }
 }

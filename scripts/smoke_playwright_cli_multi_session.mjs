@@ -23,6 +23,7 @@ const accessibilityHelp = staticAccessibilityHelp();
 const appleScriptTimeoutMs = Number(process.env.SMOKE_APPLESCRIPT_TIMEOUT_MS ?? 90_000);
 const tmpRoot = await fsTempDir("playwright-dashboard-cli-multi-smoke-");
 const daemonRoot = path.join(tmpRoot, "daemon");
+const readinessRoot = path.join(tmpRoot, "readiness");
 const workspaceDir = path.join(tmpRoot, "workspace");
 const cliEnv = {
   ...process.env,
@@ -44,6 +45,8 @@ const specs = ["alpha", "bravo", "charlie"].map((slug, index) => ({
 }));
 
 let appOpened = false;
+let launchIndex = 0;
+let currentReadinessDir = null;
 const progress = [];
 
 await runGuiPreflight();
@@ -78,14 +81,19 @@ try {
 
   logProgress("Opening safe dashboard");
   await launchApp();
-  await runAppleScript(waitForDashboardCardsScript(specs));
+  await waitForDashboardReadiness(specs, { safeMode: true });
   await quitApp();
   logProgress("Dashboard cards verified");
 
   for (const spec of specs) {
     logProgress(`Opening ${spec.label} expanded view`);
     await launchApp(spec.sessionId);
-    await runAppleScript(waitForExpandedSessionScript());
+    await waitForExpandedReadiness({
+      sessionId: spec.sessionId,
+      safeMode: true,
+      interactionEnabled: false,
+      navigationEnabled: false,
+    });
     await waitForCDPURL(spec, spec.server.rootURL, `${spec.label} root page remains selected`);
     await quitApp();
     logProgress(`${spec.label} expanded view verified`);
@@ -102,7 +110,13 @@ try {
 
   logProgress(`Opening ${controlled.label} after CLI navigation`);
   await launchApp(controlled.sessionId);
-  await runAppleScript(waitForExpandedURLScript(controlled.server.nextURL));
+  await waitForExpandedReadiness({
+    sessionId: controlled.sessionId,
+    safeMode: true,
+    interactionEnabled: false,
+    navigationEnabled: false,
+    lastURL: controlled.server.nextURL,
+  });
   await quitApp();
 
   for (const spec of untouched) {
@@ -126,7 +140,11 @@ try {
 }
 
 async function launchApp(selectedSessionId = null) {
+  currentReadinessDir = path.join(readinessRoot, `launch-${++launchIndex}`);
+  await rm(currentReadinessDir, { recursive: true, force: true });
+  await mkdir(currentReadinessDir, { recursive: true });
   const appArgs = [
+    "-n",
     appPath,
     "--args",
     "--smoke-open-dashboard",
@@ -134,6 +152,8 @@ async function launchApp(selectedSessionId = null) {
     daemonRoot,
     "--smoke-in-memory-store",
     "--smoke-safe-mode",
+    "--smoke-readiness-dir",
+    currentReadinessDir,
   ];
   if (selectedSessionId) {
     appArgs.push("--smoke-session-id", selectedSessionId);
@@ -148,7 +168,56 @@ async function quitApp() {
     (error) => console.warn(`Warning: failed to quit PlaywrightDashboard: ${error.message}`),
   );
   appOpened = false;
+  currentReadinessDir = null;
   await sleep(1_000);
+}
+
+async function waitForDashboardReadiness(sessionSpecs, expectations) {
+  return waitForReadinessPayload(
+    "dashboard-ready.json",
+    (payload) => {
+      if (payload.safeMode !== expectations.safeMode) return false;
+      const sessions = new Map(payload.sessions?.map((session) => [session.sessionId, session]));
+      return sessionSpecs.every((spec) => {
+        const session = sessions.get(spec.sessionId);
+        return session?.lastTitle === spec.label && session.cdpPort === spec.debugPort;
+      });
+    },
+    "dashboard readiness",
+  );
+}
+
+async function waitForExpandedReadiness(expectations) {
+  return waitForReadinessPayload(
+    "expanded-ready.json",
+    (payload) => {
+      if (payload.session?.sessionId !== expectations.sessionId) return false;
+      if (payload.safeMode !== expectations.safeMode) return false;
+      if (payload.interactionEnabled !== expectations.interactionEnabled) return false;
+      if (payload.navigationEnabled !== expectations.navigationEnabled) return false;
+      if (expectations.lastURL && payload.session?.lastURL !== expectations.lastURL) return false;
+      return true;
+    },
+    `expanded readiness for ${expectations.sessionId}`,
+  );
+}
+
+async function waitForReadinessPayload(filename, predicate, label) {
+  if (!currentReadinessDir) {
+    throw new Error(`No readiness directory for ${label}`);
+  }
+  const filePath = path.join(currentReadinessDir, filename);
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const payload = await readJSONFile(filePath).catch(() => null);
+    if (payload && predicate(payload)) return payload;
+    await sleep(500);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+async function readJSONFile(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
 }
 
 async function ensurePlaywrightCLI() {

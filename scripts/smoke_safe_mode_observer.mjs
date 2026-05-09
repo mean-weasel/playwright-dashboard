@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +25,7 @@ const accessibilityHelp = staticAccessibilityHelp();
 const appleScriptTimeoutMs = Number(process.env.SMOKE_APPLESCRIPT_TIMEOUT_MS ?? 90_000);
 const tmpRoot = await fsTempDir("playwright-dashboard-safe-observer-smoke-");
 const daemonRoot = path.join(tmpRoot, "daemon");
+const readinessRoot = path.join(tmpRoot, "readiness");
 const smokeId = String(process.pid);
 const specs = ["alpha", "bravo", "charlie"].map((slug, index) => ({
   slug,
@@ -40,6 +41,8 @@ const specs = ["alpha", "bravo", "charlie"].map((slug, index) => ({
 }));
 
 let appOpened = false;
+let launchIndex = 0;
+let currentReadinessDir = null;
 const progress = [];
 
 await runGuiPreflight();
@@ -82,14 +85,19 @@ try {
 
   logProgress("Opening safe dashboard");
   await launchApp();
-  await runAppleScript(waitForSafeDashboardScript(specs));
+  await waitForDashboardReadiness(specs, { safeMode: true });
   await quitApp();
   logProgress("Safe dashboard verified");
 
   for (const spec of specs) {
     logProgress(`Opening ${spec.label} in Safe mode`);
     await launchApp(spec.sessionId);
-    await runAppleScript(waitForSafeExpandedSessionScript());
+    await waitForExpandedReadiness({
+      sessionId: spec.sessionId,
+      safeMode: true,
+      interactionEnabled: false,
+      navigationEnabled: false,
+    });
     await waitFor(async () => {
       const pages = await json(`http://127.0.0.1:${spec.debugPort}/json/list`);
       return pages.some((page) => page.url === spec.server.rootURL);
@@ -102,7 +110,12 @@ try {
   const untouched = specs.slice(1);
   logProgress(`Verifying ${controlled.label} does not navigate or forward input in Safe mode`);
   await launchApp(controlled.sessionId);
-  const surface = parsePointResult(await runAppleScript(waitForSafeExpandedSessionScript()));
+  await waitForExpandedReadiness({
+    sessionId: controlled.sessionId,
+    safeMode: true,
+    interactionEnabled: false,
+    navigationEnabled: false,
+  });
   await sleep(2_000);
   if (controlled.events.some((event) => event.path === "/next")) {
     throw new Error(`${controlled.label} unexpectedly navigated while Safe mode was enabled`);
@@ -112,8 +125,6 @@ try {
     return pages.some((page) => page.url === controlled.server.rootURL);
   }, `${controlled.label} remained on root URL`);
 
-  await postPointerSequence(surface.x, surface.y);
-  await sleep(2_000);
   if (controlled.events.some((event) => event.type === "click" || event.type === "wheel")) {
     throw new Error(`${controlled.label} unexpectedly received input while Safe mode was enabled`);
   }
@@ -121,9 +132,14 @@ try {
 
   logProgress(`Switching ${controlled.label} to Control mode`);
   await setExpandedInteractionEnabled(true);
-  await launchApp(controlled.sessionId, false);
-  await runAppleScript(waitForControlExpandedSessionScript());
-  await runAppleScript(attemptEnabledNavigationScript(controlled.server.nextURL));
+  await launchApp(controlled.sessionId, false, controlled.server.nextURL);
+  await waitForExpandedReadiness({
+    sessionId: controlled.sessionId,
+    safeMode: false,
+    interactionEnabled: true,
+    navigationEnabled: true,
+    navigationResult: controlled.server.nextURL,
+  });
   await waitForEvent(
     controlled,
     (event) => event.path === "/next",
@@ -134,7 +150,12 @@ try {
   logProgress(`Returning ${controlled.label} to Safe mode`);
   await setExpandedInteractionEnabled(false);
   await launchApp(controlled.sessionId, true);
-  await runAppleScript(waitForSafeExpandedSessionScript());
+  await waitForExpandedReadiness({
+    sessionId: controlled.sessionId,
+    safeMode: true,
+    interactionEnabled: false,
+    navigationEnabled: false,
+  });
   await sleep(2_000);
   const rootRequestsAfterReturn = controlled.events.filter((event) => event.path === "/").length;
   if (rootRequestsAfterReturn > 1) {
@@ -164,7 +185,10 @@ try {
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
-async function launchApp(selectedSessionId = null, safeMode = true) {
+async function launchApp(selectedSessionId = null, safeMode = true, navigationURL = null) {
+  currentReadinessDir = path.join(readinessRoot, `launch-${++launchIndex}`);
+  await rm(currentReadinessDir, { recursive: true, force: true });
+  await mkdir(currentReadinessDir, { recursive: true });
   const appArgs = [
     "-n",
     appPath,
@@ -174,9 +198,14 @@ async function launchApp(selectedSessionId = null, safeMode = true) {
     daemonRoot,
     "--smoke-in-memory-store",
     safeMode ? "--smoke-safe-mode" : "--smoke-disable-safe-mode",
+    "--smoke-readiness-dir",
+    currentReadinessDir,
   ];
   if (selectedSessionId) {
     appArgs.push("--smoke-session-id", selectedSessionId);
+  }
+  if (navigationURL) {
+    appArgs.push("--smoke-navigate-url", navigationURL);
   }
   await run("open", appArgs);
   appOpened = true;
@@ -198,7 +227,62 @@ async function quitApp() {
     (error) => console.warn(`Warning: failed to quit PlaywrightDashboard: ${error.message}`),
   );
   appOpened = false;
+  currentReadinessDir = null;
   await sleep(1_000);
+}
+
+async function waitForDashboardReadiness(sessionSpecs, expectations) {
+  const payload = await waitForReadinessPayload(
+    "dashboard-ready.json",
+    (payload) => {
+      if (payload.safeMode !== expectations.safeMode) return false;
+      const sessions = new Map(payload.sessions?.map((session) => [session.sessionId, session]));
+      return sessionSpecs.every((spec) => {
+        const session = sessions.get(spec.sessionId);
+        return session?.displayName === spec.label && session.cdpPort === spec.debugPort;
+      });
+    },
+    "dashboard readiness",
+  );
+  return payload;
+}
+
+async function waitForExpandedReadiness(expectations) {
+  return waitForReadinessPayload(
+    "expanded-ready.json",
+    (payload) => {
+      if (payload.session?.sessionId !== expectations.sessionId) return false;
+      if (payload.safeMode !== expectations.safeMode) return false;
+      if (payload.interactionEnabled !== expectations.interactionEnabled) return false;
+      if (payload.navigationEnabled !== expectations.navigationEnabled) return false;
+      if (
+        expectations.navigationResult &&
+        payload.navigationResult !== expectations.navigationResult
+      ) {
+        return false;
+      }
+      return true;
+    },
+    `expanded readiness for ${expectations.sessionId}`,
+  );
+}
+
+async function waitForReadinessPayload(filename, predicate, label) {
+  if (!currentReadinessDir) {
+    throw new Error(`No readiness directory for ${label}`);
+  }
+  const filePath = path.join(currentReadinessDir, filename);
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const payload = await readJSONFile(filePath).catch(() => null);
+    if (payload && predicate(payload)) return payload;
+    await sleep(500);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+async function readJSONFile(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
 }
 
 async function createSessionFile(spec) {

@@ -23,6 +23,10 @@ struct SmokeLaunchArgumentsTests {
       "visual-expanded",
       "--smoke-recording-export-result",
       "/tmp/playwright-dashboard-recording/result.json",
+      "--smoke-readiness-dir",
+      "/tmp/playwright-dashboard-readiness",
+      "--smoke-navigate-url",
+      "http://127.0.0.1:3000/next",
     ])
 
     #expect(arguments.usesInMemoryStore)
@@ -37,6 +41,8 @@ struct SmokeLaunchArgumentsTests {
     #expect(
       arguments.recordingExportResultURL?.path
         == "/tmp/playwright-dashboard-recording/result.json")
+    #expect(arguments.readinessDirectory?.path == "/tmp/playwright-dashboard-readiness")
+    #expect(arguments.navigationURL == "http://127.0.0.1:3000/next")
   }
 
   @Test("uses production defaults when smoke flags are absent")
@@ -53,6 +59,8 @@ struct SmokeLaunchArgumentsTests {
     #expect(arguments.daemonDirectory == nil)
     #expect(arguments.selectedSessionId == nil)
     #expect(arguments.recordingExportResultURL == nil)
+    #expect(arguments.readinessDirectory == nil)
+    #expect(arguments.navigationURL == nil)
   }
 
   @Test("ignores smoke flags that are missing values")
@@ -61,10 +69,14 @@ struct SmokeLaunchArgumentsTests {
       "PlaywrightDashboard",
       "--smoke-daemon-dir",
       "--smoke-session-id",
+      "--smoke-readiness-dir",
+      "--smoke-navigate-url",
     ])
 
     #expect(arguments.daemonDirectory == nil)
     #expect(arguments.selectedSessionId == nil)
+    #expect(arguments.readinessDirectory == nil)
+    #expect(arguments.navigationURL == nil)
   }
 
   @Test("safe mode smoke flag can be explicitly disabled")

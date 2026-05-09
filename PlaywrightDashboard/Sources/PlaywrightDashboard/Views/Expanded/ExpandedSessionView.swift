@@ -36,6 +36,8 @@ struct ExpandedSessionView: View {
   @State var lastRecordingExportURL: URL?
   @State var isExportingRecording = false
   @State var recordingExportError: String?
+  @State var smokeNavigationResult: String?
+  @State var smokeNavigationError: String?
   private var selectedTargetKey: String {
     session.selectedTargetId ?? "default"
   }
@@ -94,6 +96,15 @@ struct ExpandedSessionView: View {
     }
     .task(id: session.sessionId) {
       await targetRefreshLoop()
+    }
+    .task(id: smokeCommandSignature) {
+      await runSmokeNavigationIfNeeded()
+    }
+    .onAppear {
+      reportSmokeExpandedReadiness()
+    }
+    .onChange(of: expandedReadinessSignature) {
+      reportSmokeExpandedReadiness()
     }
   }
 
@@ -218,7 +229,7 @@ struct ExpandedSessionView: View {
     }
   }
 
-  private func navigate(to rawURL: String) async throws -> String {
+  func navigate(to rawURL: String) async throws -> String {
     guard !appState.isSafeMode else {
       throw SafeModeBlockedError()
     }
@@ -281,17 +292,4 @@ struct ExpandedSessionView: View {
     }
   }
 
-}
-
-extension ExpandedSessionView {
-  var connectionSummary: ExpandedConnectionSummary {
-    ExpandedConnectionSummary(
-      frameMode: frameMode,
-      targetMode: targetMonitorMode,
-      targetCount: session.pageTargets.count,
-      selectedTarget: session.selectedPageTarget,
-      lastCDPError: lastCDPError,
-      lastTargetError: lastTargetRefreshError
-    )
-  }
 }
