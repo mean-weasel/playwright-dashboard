@@ -1,8 +1,11 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
   @Environment(AppState.self) private var appState
   @State private var showClearClosedConfirmation = false
+  @State private var copiedDiagnostics = false
   @AppStorage(DashboardSettings.staleThresholdSecondsKey) private var staleThresholdSeconds = 120
   @AppStorage(DashboardSettings.thumbnailRefreshSecondsKey) private var thumbnailRefreshSeconds = 5
   @AppStorage(DashboardSettings.thumbnailQualityKey) private var thumbnailQuality = 50
@@ -102,10 +105,74 @@ struct SettingsView: View {
 
       if appState.isPersistenceDegraded {
         LabeledContent("Storage") {
-          HStack(spacing: 8) {
+          VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 8) {
+              Image(systemName: "externaldrive.badge.exclamationmark")
+                .foregroundStyle(.orange)
+              Text("Temporary only")
+            }
+            if let reason = appState.persistenceDegradedReason {
+              Text(reason)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.trailing)
+            }
+          }
+        }
+      }
+
+      Section("Diagnostics") {
+        LabeledContent("Daemon path") {
+          Text(appState.daemonDirectoryPath)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .multilineTextAlignment(.trailing)
+            .textSelection(.enabled)
+        }
+
+        HStack {
+          Button {
+            copyDiagnostics()
+          } label: {
+            Label(
+              copiedDiagnostics ? "Copied" : "Copy App Diagnostics",
+              systemImage: copiedDiagnostics ? "checkmark" : "doc.on.doc"
+            )
+          }
+
+          Button {
+            exportDiagnostics()
+          } label: {
+            Label("Export Diagnostics", systemImage: "square.and.arrow.down")
+          }
+
+          Button {
+            appState.revealApplicationSupportDirectory()
+          } label: {
+            Label("Reveal Storage", systemImage: "folder")
+          }
+        }
+
+        if let exportURL = appState.lastDiagnosticsExportURL {
+          Label {
+            Text(exportURL.lastPathComponent)
+              .font(.caption)
+          } icon: {
+            Image(systemName: "checkmark.circle.fill")
+              .foregroundStyle(.green)
+          }
+        }
+
+        if let exportError = appState.lastDiagnosticsExportError {
+          Label {
+            Text(exportError)
+              .font(.caption)
+              .lineLimit(2)
+          } icon: {
             Image(systemName: "externaldrive.badge.exclamationmark")
-              .foregroundStyle(.orange)
-            Text("Temporary only")
+              .foregroundStyle(.red)
           }
         }
       }
@@ -142,6 +209,30 @@ struct SettingsView: View {
       // Sync toggle with actual plist state on disk
       launchAtLogin = LaunchAtLoginManager.isEnabled
       appState.refreshPlaywrightCLIStatus()
+    }
+  }
+
+  private func copyDiagnostics() {
+    appState.copyAppDiagnostics()
+    copiedDiagnostics = true
+    Task {
+      try? await Task.sleep(for: .seconds(2))
+      await MainActor.run {
+        copiedDiagnostics = false
+      }
+    }
+  }
+
+  private func exportDiagnostics() {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [UTType.plainText]
+    panel.nameFieldStringValue = "playwright-dashboard-diagnostics.txt"
+    panel.canCreateDirectories = true
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else { return }
+      Task { @MainActor in
+        appState.exportAppDiagnostics(to: url)
+      }
     }
   }
 }

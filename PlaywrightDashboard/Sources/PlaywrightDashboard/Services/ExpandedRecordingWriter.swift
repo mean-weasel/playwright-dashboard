@@ -1,25 +1,39 @@
 import Foundation
 
 actor ExpandedRecordingWriter {
+  struct Limits: Sendable, Equatable {
+    let maxDuration: TimeInterval
+    let maxBytes: Int
+
+    static let `default` = Limits(
+      maxDuration: 10 * 60,
+      maxBytes: 1_073_741_824
+    )
+  }
+
   private let snapshot: ExpandedRecordingSessionSnapshot
   private let baseDirectory: URL
   private let fileManager: FileManager
   private let now: @Sendable () -> Date
+  private let limits: Limits
   private let startedAt: Date
   private var directoryURL: URL?
   private var frames: [ExpandedRecordingManifest.Frame] = []
+  private var bytesWritten = 0
   private var isFinished = false
 
   init(
     snapshot: ExpandedRecordingSessionSnapshot,
     baseDirectory: URL = ExpandedRecordingWriter.defaultBaseDirectory(),
     fileManager: FileManager = .default,
+    limits: Limits = .default,
     now: @escaping @Sendable () -> Date = Date.init
   ) {
     self.snapshot = snapshot
     self.baseDirectory = baseDirectory
     self.fileManager = fileManager
     self.now = now
+    self.limits = limits
     self.startedAt = now()
   }
 
@@ -39,15 +53,18 @@ actor ExpandedRecordingWriter {
   func append(frame: CDPClient.ScreencastFrame, receivedAt: Date? = nil) throws -> Int {
     guard !isFinished else { throw RecordingError.alreadyFinished }
     let directory = try activeDirectory()
+    let timestamp = receivedAt ?? now()
+    try validateLimits(nextFrameBytes: frame.jpeg.count, timestamp: timestamp)
     let index = frames.count + 1
     let filename = String(format: "frame-%06d.jpg", index)
     let url = directory.appendingPathComponent(filename)
     try frame.jpeg.write(to: url, options: .atomic)
+    bytesWritten += frame.jpeg.count
     frames.append(
       ExpandedRecordingManifest.Frame(
         index: index,
         filename: filename,
-        timestamp: receivedAt ?? now(),
+        timestamp: timestamp,
         url: frame.url,
         title: frame.title
       ))
@@ -93,6 +110,21 @@ actor ExpandedRecordingWriter {
     return try start()
   }
 
+  private func validateLimits(nextFrameBytes: Int, timestamp: Date) throws {
+    let elapsed = timestamp.timeIntervalSince(startedAt)
+    if elapsed > limits.maxDuration {
+      throw RecordingError.limitReached(
+        "Recording reached the 10 minute duration limit."
+      )
+    }
+
+    if bytesWritten + nextFrameBytes > limits.maxBytes {
+      throw RecordingError.limitReached(
+        "Recording reached the 1 GB size limit."
+      )
+    }
+  }
+
   private func uniqueRecordingDirectory() -> URL {
     let stamp = Self.directoryDateFormatter.string(from: startedAt)
     let name = "\(Self.sanitizedPathComponent(snapshot.displayName))-\(stamp)"
@@ -133,10 +165,16 @@ actor ExpandedRecordingWriter {
 
   enum RecordingError: Error, LocalizedError, Equatable {
     case alreadyFinished
+    case limitReached(String)
+
+    var isLimitReached: Bool {
+      if case .limitReached = self { true } else { false }
+    }
 
     var errorDescription: String? {
       switch self {
       case .alreadyFinished: "Recording has already finished."
+      case .limitReached(let message): message
       }
     }
   }

@@ -90,7 +90,6 @@ try {
   const untouched = specs.slice(1);
   await launchApp(controlled.sessionId);
   const surface = parsePointResult(await runAppleScript(waitForSafeExpandedSessionScript()));
-  await runAppleScript(attemptDisabledNavigationScript(controlled.server.nextURL));
   await sleep(2_000);
   if (controlled.events.some((event) => event.path === "/next")) {
     throw new Error(`${controlled.label} unexpectedly navigated while Safe mode was enabled`);
@@ -104,6 +103,27 @@ try {
   await sleep(2_000);
   if (controlled.events.some((event) => event.type === "click" || event.type === "wheel")) {
     throw new Error(`${controlled.label} unexpectedly received input while Safe mode was enabled`);
+  }
+  await quitApp();
+
+  await setExpandedInteractionEnabled(true);
+  await launchApp(controlled.sessionId, false);
+  await runAppleScript(waitForControlExpandedSessionScript());
+  await runAppleScript(attemptEnabledNavigationScript(controlled.server.nextURL));
+  await waitForEvent(
+    controlled,
+    (event) => event.path === "/next",
+    `${controlled.label} navigated after Control mode was enabled`,
+  );
+  await quitApp();
+
+  await setExpandedInteractionEnabled(false);
+  await launchApp(controlled.sessionId, true);
+  await runAppleScript(waitForSafeExpandedSessionScript());
+  await sleep(2_000);
+  const rootRequestsAfterReturn = controlled.events.filter((event) => event.path === "/").length;
+  if (rootRequestsAfterReturn > 1) {
+    throw new Error(`${controlled.label} unexpectedly navigated after returning to Safe mode`);
   }
 
   for (const spec of untouched) {
@@ -128,21 +148,32 @@ try {
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
-async function launchApp(selectedSessionId = null) {
+async function launchApp(selectedSessionId = null, safeMode = true) {
   const appArgs = [
+    "-n",
     appPath,
     "--args",
     "--smoke-open-dashboard",
     "--smoke-daemon-dir",
     daemonRoot,
     "--smoke-in-memory-store",
-    "--smoke-safe-mode",
+    safeMode ? "--smoke-safe-mode" : "--smoke-disable-safe-mode",
   ];
   if (selectedSessionId) {
     appArgs.push("--smoke-session-id", selectedSessionId);
   }
   await run("open", appArgs);
   appOpened = true;
+}
+
+async function setExpandedInteractionEnabled(enabled) {
+  await run("defaults", [
+    "write",
+    "com.neonwatty.PlaywrightDashboard",
+    "expandedInteractionEnabled",
+    "-bool",
+    enabled ? "true" : "false",
+  ]);
 }
 
 async function quitApp() {
@@ -261,14 +292,14 @@ function testPage(spec, routePath) {
 
 function waitForSafeDashboardScript(sessionSpecs) {
   const waits = sessionSpecs
-    .map((spec) => `set card_${spec.slug} to waitForNamedElement(appName, "session-card-${spec.sessionId}", 80)`)
+    .map((spec) => `set row_${spec.slug} to waitForNamedElement(appName, "${spec.label}", 160)`)
     .join("\n");
   return `${appleScriptHelpers()}
 set appName to "PlaywrightDashboard"
 if not waitForProcess(appName, 30) then error "PlaywrightDashboard process did not launch"
 ${waits}
 set sidebarSafeBadge to waitForNamedElement(appName, "sidebar-safe-mode-badge", 80)
-return "cards=${sessionSpecs.length}"
+return "sessions=${sessionSpecs.length}"
 `;
 }
 
@@ -278,12 +309,10 @@ set appName to "PlaywrightDashboard"
 if not waitForProcess(appName, 30) then error "PlaywrightDashboard process did not launch"
 set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 80)
 set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
-set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 80)
 set safeBadge to waitForNamedElement(appName, "expanded-safe-mode-badge", 80)
 set cdpButton to waitForNamedElement(appName, "expanded-open-cdp-inspector", 80)
 set enableControlButton to waitForNamedElement(appName, "expanded-enable-control-mode", 80)
 assertDisabled(appName, "expanded-navigate-url-field")
-assertDisabled(appName, "expanded-navigate-url-button")
 assertDisabled(appName, "expanded-open-cdp-inspector")
 assertMissing(appName, "expanded-interaction-mode")
 assertMissing(appName, "expanded-return-to-safe-mode")
@@ -301,7 +330,11 @@ function attemptDisabledNavigationScript(url) {
   return `${appleScriptHelpers()}
 set appName to "PlaywrightDashboard"
 set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
-set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 80)
+try
+  set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 20)
+on error
+  return "navigation-button-unavailable"
+end try
 tell application "PlaywrightDashboard" to activate
 tell application "System Events"
   tell process appName
@@ -319,6 +352,103 @@ tell application "System Events"
   delay 0.5
   click navButton
 end tell
+`;
+}
+
+function waitForControlExpandedSessionScript() {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+if not waitForProcess(appName, 30) then error "PlaywrightDashboard process did not launch"
+set interactionMode to waitForNamedElement(appName, "expanded-interaction-mode", 80)
+set returnButton to waitForNamedElement(appName, "expanded-return-to-safe-mode", 80)
+set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
+set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 80)
+assertEnabled(appName, "expanded-navigate-url-field")
+assertEnabled(appName, "expanded-navigate-url-button")
+assertMissing(appName, "expanded-safe-mode-badge")
+set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 80)
+tell application "System Events"
+  set surfacePosition to position of surface
+  set surfaceSize to size of surface
+end tell
+set centerX to (item 1 of surfacePosition) + ((item 1 of surfaceSize) / 2)
+set centerY to (item 2 of surfacePosition) + ((item 2 of surfaceSize) / 2)
+return "x=" & (centerX as integer) & " y=" & (centerY as integer)
+`;
+}
+
+function enableControlModeScript() {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+set enableControlButton to waitForNamedElement(appName, "expanded-enable-control-mode", 80)
+tell application "PlaywrightDashboard" to activate
+tell application "System Events"
+  tell process appName
+    set frontmost to true
+    click enableControlButton
+  end tell
+end tell
+set confirmButton to waitForNamedElement(appName, "Enable Control Mode", 40)
+tell application "System Events"
+  tell process appName
+    click confirmButton
+  end tell
+end tell
+set interactionMode to waitForNamedElement(appName, "expanded-interaction-mode", 80)
+set returnButton to waitForNamedElement(appName, "expanded-return-to-safe-mode", 80)
+set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
+set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 80)
+assertEnabled(appName, "expanded-navigate-url-field")
+assertEnabled(appName, "expanded-navigate-url-button")
+assertMissing(appName, "expanded-safe-mode-badge")
+set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 80)
+tell application "System Events"
+  set surfacePosition to position of surface
+  set surfaceSize to size of surface
+end tell
+set centerX to (item 1 of surfacePosition) + ((item 1 of surfaceSize) / 2)
+set centerY to (item 2 of surfacePosition) + ((item 2 of surfaceSize) / 2)
+return "x=" & (centerX as integer) & " y=" & (centerY as integer)
+`;
+}
+
+function attemptEnabledNavigationScript(url) {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
+assertEnabled(appName, "expanded-navigate-url-field")
+tell application "PlaywrightDashboard" to activate
+tell application "System Events"
+  tell process appName
+    set frontmost to true
+  end tell
+  click navField
+  try
+    set focused of navField to true
+  end try
+  delay 0.2
+  keystroke "a" using command down
+  delay 0.1
+  set the clipboard to "${escapeAppleScriptString(url)}"
+  keystroke "v" using command down
+  delay 0.2
+  key code 36
+end tell
+`;
+}
+
+function returnToSafeModeScript() {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+set returnButton to waitForNamedElement(appName, "expanded-return-to-safe-mode", 80)
+tell application "System Events"
+  tell process appName
+    click returnButton
+  end tell
+end tell
+set safeBadge to waitForNamedElement(appName, "expanded-safe-mode-badge", 80)
+assertDisabled(appName, "expanded-navigate-url-field")
+assertMissing(appName, "expanded-interaction-mode")
 `;
 }
 
@@ -425,6 +555,11 @@ on assertDisabled(processName, elementName)
   set elementRef to waitForNamedElement(processName, elementName, 20)
   if my isElementEnabled(elementRef) then error (elementName & " should be disabled in Safe mode")
 end assertDisabled
+
+on assertEnabled(processName, elementName)
+  set elementRef to waitForNamedElement(processName, elementName, 20)
+  if not my isElementEnabled(elementRef) then error (elementName & " should be enabled in Control mode")
+end assertEnabled
 `;
 }
 
@@ -566,7 +701,7 @@ function run(command, args, options = {}) {
 }
 
 function runAppleScript(script) {
-  return run("osascript", ["-e", script], { timeout: 120_000 });
+  return run("osascript", ["-e", script], { timeout: 240_000 });
 }
 
 async function waitFor(predicate, label, timeoutMs = 30_000) {

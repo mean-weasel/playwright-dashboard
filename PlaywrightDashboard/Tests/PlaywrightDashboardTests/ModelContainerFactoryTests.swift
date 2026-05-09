@@ -1,3 +1,4 @@
+import Foundation
 import SwiftData
 import Testing
 
@@ -25,6 +26,7 @@ struct ModelContainerFactoryTests {
 
     #expect(didUseFallback)
     #expect(creation.usedFallback)
+    #expect(creation.persistenceErrorDescription == "persistentFailed")
     #expect(ModelContainerFactory.lastCreationUsedFallback)
     let record = SessionRecord(
       sessionId: "fallback",
@@ -52,10 +54,18 @@ struct ModelContainerFactoryTests {
     )
 
     #expect(creation.usedFallback == false)
+    #expect(creation.persistenceErrorDescription == nil)
     #expect(ModelContainerFactory.lastCreationUsedFallback == false)
   }
 
-  private enum TestError: Error {
+  private enum TestError: LocalizedError {
     case persistentFailed
+
+    var errorDescription: String? {
+      switch self {
+      case .persistentFailed:
+        return "persistentFailed"
+      }
+    }
   }
 }

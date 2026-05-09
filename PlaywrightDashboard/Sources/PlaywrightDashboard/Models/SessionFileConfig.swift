@@ -1,7 +1,7 @@
 import Foundation
 
 /// Decoded representation of a Playwright `.session` JSON file on disk.
-struct SessionFileConfig: Codable {
+struct SessionFileConfig: Codable, Sendable {
   let name: String
   let version: String
   let timestamp: Int
@@ -12,13 +12,13 @@ struct SessionFileConfig: Codable {
 
   // MARK: - Nested types
 
-  struct CLIConfig: Codable {}
+  struct CLIConfig: Codable, Sendable {}
 
-  struct BrowserConfig: Codable {
+  struct BrowserConfig: Codable, Sendable {
     let browserName: String
     let launchOptions: LaunchOptions
 
-    struct LaunchOptions: Codable {
+    struct LaunchOptions: Codable, Sendable {
       let headless: Bool?
       let chromiumSandbox: Bool?
       let cdpPort: Int?

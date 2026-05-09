@@ -5,11 +5,11 @@ import Testing
 @testable import PlaywrightDashboard
 
 @MainActor
-@Suite("SessionManager")
+@Suite("SessionManager", .serialized)
 struct SessionManagerTests {
 
   @Test("Creates, updates, closes, and reopens sessions from files")
-  func syncLifecycle() throws {
+  func syncLifecycle() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(
@@ -18,7 +18,7 @@ struct SessionManagerTests {
     let manager = SessionManager(
       sessionFileProvider: { provider.files }, modelContext: harness.context)
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     var sessions = manager.allSessions
     #expect(sessions.count == 1)
@@ -34,7 +34,7 @@ struct SessionManagerTests {
         port: 9444
       )
     ]
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     sessions = manager.allSessions
     #expect(sessions[0].workspaceName == "admin-api-9f3a")
@@ -42,7 +42,7 @@ struct SessionManagerTests {
     #expect(sessions[0].cdpPort == 9444)
 
     provider.files = []
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     sessions = manager.allSessions
     #expect(sessions[0].status == .closed)
@@ -55,7 +55,7 @@ struct SessionManagerTests {
         port: 9444
       )
     ]
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     sessions = manager.allSessions
     #expect(sessions[0].status == .idle)
@@ -63,7 +63,7 @@ struct SessionManagerTests {
   }
 
   @Test("Does not reopen user closed sessions")
-  func userClosedSessionStaysClosed() throws {
+  func userClosedSessionStaysClosed() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(
@@ -72,18 +72,18 @@ struct SessionManagerTests {
     let manager = SessionManager(
       sessionFileProvider: { provider.files }, modelContext: harness.context)
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
     manager.allSessions[0].close(byUser: true)
     try harness.context.save()
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     #expect(manager.allSessions[0].status == .closed)
     #expect(manager.allSessions[0].userClosed == true)
   }
 
   @Test("Purges expired closed sessions whose files are gone")
-  func purgesExpiredClosedSessions() throws {
+  func purgesExpiredClosedSessions() async throws {
     let harness = try TestSessionHarness()
     let expired = SessionRecord(
       sessionId: "expired",
@@ -104,7 +104,7 @@ struct SessionManagerTests {
       closedSessionRetentionProvider: { .seconds(60 * 60) }
     )
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     let saved = try harness.context.fetch(FetchDescriptor<SessionRecord>())
     #expect(saved.isEmpty)
@@ -112,7 +112,7 @@ struct SessionManagerTests {
   }
 
   @Test("Does not purge closed sessions when retention is disabled")
-  func retentionDisabledKeepsClosedSessions() throws {
+  func retentionDisabledKeepsClosedSessions() async throws {
     let harness = try TestSessionHarness()
     let closed = SessionRecord(
       sessionId: "closed",
@@ -133,13 +133,13 @@ struct SessionManagerTests {
       closedSessionRetentionProvider: { nil }
     )
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     #expect(manager.allSessions.map(\.sessionId) == ["closed"])
   }
 
   @Test("Does not purge user closed sessions while their files are live")
-  func liveUserClosedSessionIsNotPurged() throws {
+  func liveUserClosedSessionIsNotPurged() async throws {
     let harness = try TestSessionHarness()
     let liveFile = try harness.writeSession(
       name: "live-hidden",
@@ -166,7 +166,7 @@ struct SessionManagerTests {
       closedSessionRetentionProvider: { .seconds(60 * 60) }
     )
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     #expect(manager.allSessions.count == 1)
     #expect(manager.allSessions[0].sessionId == "live-hidden")
@@ -175,7 +175,7 @@ struct SessionManagerTests {
   }
 
   @Test("Records malformed session file errors without blocking valid sessions")
-  func recordsMalformedSessionFiles() throws {
+  func recordsMalformedSessionFiles() async throws {
     let harness = try TestSessionHarness()
     let validFile = try harness.writeSession(
       name: "valid", workspace: harness.workspace("valid"), port: 9222)
@@ -187,14 +187,14 @@ struct SessionManagerTests {
       modelContext: harness.context
     )
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     #expect(manager.allSessions.map(\.sessionId) == ["valid"])
     #expect(manager.sessionFileErrors.keys.contains("broken.session"))
   }
 
   @Test("Clears session file errors after file parses successfully")
-  func clearsSessionFileErrorsAfterSuccessfulParse() throws {
+  func clearsSessionFileErrorsAfterSuccessfulParse() async throws {
     let harness = try TestSessionHarness()
     let file = harness.root.appendingPathComponent("recover.session")
     try "{ not-json".write(to: file, atomically: true, encoding: .utf8)
@@ -204,13 +204,13 @@ struct SessionManagerTests {
       modelContext: harness.context
     )
 
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
     #expect(manager.sessionFileErrors.keys.contains("recover.session"))
 
     provider.files = [
       try harness.writeSession(name: "recover", workspace: harness.workspace("recover"), port: 9222)
     ]
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
 
     #expect(manager.sessionFileErrors.isEmpty)
     #expect(manager.allSessions.map(\.sessionId) == ["recover"])

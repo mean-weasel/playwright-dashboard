@@ -25,6 +25,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  PLAYWRIGHT_CLI_VERSION: 0.1.5
+
 jobs:
   expanded-interaction:
     name: Expanded Interaction Smoke
@@ -45,11 +48,13 @@ jobs:
 
       - name: Install Playwright CLI
         if: inputs.mode == 'cli-multi' || inputs.mode == 'all'
-        run: npm install -g @playwright/cli
+        run: npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
 
       - name: Run expanded interaction smoke
         env:
           RUN_EXPANDED_INTERACTION_SMOKE: "1"
+          SMOKE_ENFORCE_SURFACE_PIXELS: "1"
+          SMOKE_ENFORCE_INPUT_EVENTS: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
         if: inputs.mode == 'live' || inputs.mode == 'both' || inputs.mode == 'all'
         run: make smoke-expanded-interaction

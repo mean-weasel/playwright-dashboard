@@ -36,6 +36,7 @@ final class SessionManager {
   private let sessionFileProvider: @MainActor () -> [URL]
   private let modelContext: ModelContext
   private let closedSessionRetentionProvider: () -> Duration?
+  private let sessionFileScanner: SessionFileScanner
 
   // MARK: - Init
 
@@ -43,6 +44,7 @@ final class SessionManager {
     self.sessionFileProvider = { watcher.sessionFiles }
     self.modelContext = modelContext
     self.closedSessionRetentionProvider = { DashboardSettings.closedSessionRetention() }
+    self.sessionFileScanner = SessionFileScanner()
     loadExistingRecords()
   }
 
@@ -51,11 +53,13 @@ final class SessionManager {
     modelContext: ModelContext,
     closedSessionRetentionProvider: @escaping () -> Duration? = {
       DashboardSettings.closedSessionRetention()
-    }
+    },
+    sessionFileScanner: SessionFileScanner = SessionFileScanner()
   ) {
     self.sessionFileProvider = sessionFileProvider
     self.modelContext = modelContext
     self.closedSessionRetentionProvider = closedSessionRetentionProvider
+    self.sessionFileScanner = sessionFileScanner
     loadExistingRecords()
   }
 
@@ -63,17 +67,12 @@ final class SessionManager {
 
   /// Called whenever `DaemonWatcher.sessionFiles` changes.
   /// Reconciles the on-disk list with the SwiftData store.
-  func syncWithWatcher() {
+  func syncWithWatcher() async {
     let fileURLs = sessionFileProvider()
-    sessionFileErrors.removeAll()
+    let scanResult = await sessionFileScanner.scan(fileURLs)
+    sessionFileErrors = scanResult.errors
 
-    // Parse all files and collect the canonical session IDs from JSON
-    var liveConfigs: [SessionFileConfig] = []
-    for url in fileURLs {
-      guard let config = parseSessionFile(at: url) else { continue }
-      liveConfigs.append(config)
-    }
-
+    let liveConfigs = scanResult.configs
     let liveIds = Set(liveConfigs.map(\.name))
 
     // 1. Upsert each live config
@@ -112,27 +111,6 @@ final class SessionManager {
     } catch {
       logger.error("SwiftData fetch failed: \(error.localizedDescription)")
       allRecords = []
-    }
-  }
-
-  /// Parse a `.session` file URL into a `SessionFileConfig`.
-  private func parseSessionFile(at url: URL) -> SessionFileConfig? {
-    let data: Data
-    do {
-      data = try Data(contentsOf: url)
-    } catch {
-      logger.debug(
-        "Cannot read session file \(url.lastPathComponent): \(error.localizedDescription)")
-      sessionFileErrors[url.lastPathComponent] = error.localizedDescription
-      return nil
-    }
-    do {
-      return try JSONDecoder().decode(SessionFileConfig.self, from: data)
-    } catch {
-      logger.warning(
-        "Cannot parse session file \(url.lastPathComponent): \(error.localizedDescription)")
-      sessionFileErrors[url.lastPathComponent] = error.localizedDescription
-      return nil
     }
   }
 

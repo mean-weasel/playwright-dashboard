@@ -74,6 +74,43 @@ struct ExpandedRecordingWriterTests {
     #expect(!FileManager.default.fileExists(atPath: directory.path))
   }
 
+  @Test("rejects frames after duration limit")
+  func rejectsFramesAfterDurationLimit() async throws {
+    let tempDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+    let writer = ExpandedRecordingWriter(
+      snapshot: snapshot,
+      baseDirectory: tempDirectory,
+      limits: .init(maxDuration: 10, maxBytes: 1_000)
+    )
+
+    await #expect(throws: ExpandedRecordingWriter.RecordingError.self) {
+      try await writer.append(
+        frame: frame(bytes: [0x01]),
+        receivedAt: Date().addingTimeInterval(11)
+      )
+    }
+  }
+
+  @Test("rejects frames that exceed size limit")
+  func rejectsFramesAfterSizeLimit() async throws {
+    let tempDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+    let writer = ExpandedRecordingWriter(
+      snapshot: snapshot,
+      baseDirectory: tempDirectory,
+      limits: .init(maxDuration: 600, maxBytes: 3)
+    )
+
+    _ = try await writer.append(frame: frame(bytes: [0x01, 0x02]))
+
+    await #expect(throws: ExpandedRecordingWriter.RecordingError.self) {
+      try await writer.append(frame: frame(bytes: [0x03, 0x04]))
+    }
+  }
+
   @Test("sanitizes recording directory names")
   func sanitizesRecordingDirectoryNames() {
     #expect(
@@ -89,6 +126,15 @@ struct ExpandedRecordingWriterTests {
       targetId: "target-1",
       initialURL: "https://example.com",
       initialTitle: "Example"
+    )
+  }
+
+  private func frame(bytes: [UInt8]) -> CDPClient.ScreencastFrame {
+    CDPClient.ScreencastFrame(
+      jpeg: Data(bytes),
+      sessionId: 7,
+      url: nil,
+      title: nil
     )
   }
 }
