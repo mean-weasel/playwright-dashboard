@@ -50,6 +50,16 @@ extension AppState {
     return openExternalURL(url)
   }
 
+  @discardableResult
+  func openLatestRelease() -> Bool {
+    guard let url = URL(string: "https://github.com/neonwatty/playwright-dashboard/releases/latest")
+    else {
+      lastOpenURLError = "Latest release URL is invalid."
+      return false
+    }
+    return openExternalURL(url)
+  }
+
   func dismissOpenURLError() {
     lastOpenURLError = nil
   }

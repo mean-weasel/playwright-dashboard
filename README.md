@@ -30,6 +30,11 @@ Download the `PlaywrightDashboard-v<version>-<build>.zip` asset and its
 The release artifact is Developer ID signed, notarized, stapled, and verified
 with Gatekeeper.
 
+## Beta Testing
+
+See [BETA_TESTING.md](BETA_TESTING.md) for install steps, scenarios to try,
+known limitations, and what to include in feedback.
+
 ## Build And Test
 
 Use the Makefile from the repository root:
