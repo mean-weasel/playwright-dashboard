@@ -831,6 +831,46 @@ struct AppStateTests {
     #expect(!text.contains("0x01"))
   }
 
+  @Test("feedback summary includes beta support context")
+  func feedbackSummaryIncludesBetaSupportContext() async throws {
+    let harness = try TestSessionHarness()
+    let sessionFile = try harness.writeSession(
+      name: "feedback-session",
+      workspace: harness.workspace("feedback-session"),
+      port: 9334
+    )
+    let appState = AppState(
+      sessionFileProvider: { [sessionFile] },
+      daemonDirectory: harness.root,
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      cliStatusProvider: PlaywrightCLIStatusProvider { _ in
+        ProcessResult(exitStatus: 0, output: "2.0.0\n")
+      },
+      safeModeProvider: { true }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    await appState.performSync()
+    appState.refreshPlaywrightCLIStatus()
+    await waitUntil { appState.playwrightCLIStatus == .available("2.0.0") }
+
+    let text = appState.feedbackSummaryText(now: Date(timeIntervalSince1970: 0))
+
+    #expect(text.contains("Playwright Dashboard Feedback Summary"))
+    #expect(text.contains("generatedAt: 1970-01-01T00:00:00.000Z"))
+    #expect(text.contains("appVersion:"))
+    #expect(text.contains("appBuild:"))
+    #expect(text.contains("operatingSystem:"))
+    #expect(text.contains("safeModeEnabled: true"))
+    #expect(text.contains("playwrightCLIStatus: playwright-cli 2.0.0"))
+    #expect(text.contains("openSessionCount: 1"))
+    #expect(text.contains("sessionFileCount: 1"))
+    #expect(
+      text.contains(
+        "Please attach a diagnostics export from Settings > Diagnostics > Export Diagnostics."))
+  }
+
   @Test("exportAppDiagnostics writes text and publishes result")
   func exportAppDiagnosticsWritesText() async throws {
     let harness = try TestSessionHarness()

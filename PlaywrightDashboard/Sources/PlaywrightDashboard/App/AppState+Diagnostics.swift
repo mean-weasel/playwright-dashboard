@@ -76,9 +76,32 @@ extension AppState {
     makeDiagnosticsSnapshot().text
   }
 
+  func feedbackSummaryText(now: Date = Date()) -> String {
+    let snapshot = makeDiagnosticsSnapshot(now: now)
+    let openSessionCount = sessions.filter { $0.status != .closed }.count
+    return [
+      "Playwright Dashboard Feedback Summary",
+      "generatedAt: \(AppDiagnosticsSnapshot.formattedDate(snapshot.generatedAt))",
+      "appVersion: \(snapshot.appVersion)",
+      "appBuild: \(snapshot.appBuild)",
+      "operatingSystem: \(snapshot.operatingSystem)",
+      "safeModeEnabled: \(snapshot.safeModeEnabled)",
+      "playwrightCLIStatus: \(snapshot.playwrightCLIStatus)",
+      "openSessionCount: \(openSessionCount)",
+      "sessionFileCount: \(snapshot.sessionFileCount)",
+      "",
+      "Please attach a diagnostics export from Settings > Diagnostics > Export Diagnostics.",
+    ].joined(separator: "\n")
+  }
+
   func copyAppDiagnostics() {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(diagnosticsText(), forType: .string)
+  }
+
+  func copyFeedbackSummary() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(feedbackSummaryText(), forType: .string)
   }
 
   @discardableResult

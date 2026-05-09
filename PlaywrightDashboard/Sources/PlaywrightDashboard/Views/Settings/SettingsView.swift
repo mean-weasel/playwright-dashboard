@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
   @Environment(AppState.self) private var appState
   @State private var showClearClosedConfirmation = false
+  @State private var copiedFeedbackSummary = false
   @State private var copiedDiagnostics = false
   @AppStorage(DashboardSettings.staleThresholdSecondsKey) private var staleThresholdSeconds = 120
   @AppStorage(DashboardSettings.thumbnailRefreshSecondsKey) private var thumbnailRefreshSeconds = 5
@@ -147,26 +148,39 @@ struct SettingsView: View {
             .textSelection(.enabled)
         }
 
-        HStack {
-          Button {
-            copyDiagnostics()
-          } label: {
-            Label(
-              copiedDiagnostics ? "Copied" : "Copy App Diagnostics",
-              systemImage: copiedDiagnostics ? "checkmark" : "doc.on.doc"
-            )
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            Button {
+              copyFeedbackSummary()
+            } label: {
+              Label(
+                copiedFeedbackSummary ? "Copied" : "Copy Feedback Summary",
+                systemImage: copiedFeedbackSummary ? "checkmark" : "doc.on.clipboard"
+              )
+            }
+
+            Button {
+              copyDiagnostics()
+            } label: {
+              Label(
+                copiedDiagnostics ? "Copied" : "Copy App Diagnostics",
+                systemImage: copiedDiagnostics ? "checkmark" : "doc.on.doc"
+              )
+            }
           }
 
-          Button {
-            exportDiagnostics()
-          } label: {
-            Label("Export Diagnostics", systemImage: "square.and.arrow.down")
-          }
+          HStack {
+            Button {
+              exportDiagnostics()
+            } label: {
+              Label("Export Diagnostics", systemImage: "square.and.arrow.down")
+            }
 
-          Button {
-            appState.revealApplicationSupportDirectory()
-          } label: {
-            Label("Reveal Storage", systemImage: "folder")
+            Button {
+              appState.revealApplicationSupportDirectory()
+            } label: {
+              Label("Reveal Storage", systemImage: "folder")
+            }
           }
         }
 
@@ -224,6 +238,17 @@ struct SettingsView: View {
       // Sync toggle with actual plist state on disk
       launchAtLogin = LaunchAtLoginManager.isEnabled
       appState.refreshPlaywrightCLIStatus()
+    }
+  }
+
+  private func copyFeedbackSummary() {
+    appState.copyFeedbackSummary()
+    copiedFeedbackSummary = true
+    Task {
+      try? await Task.sleep(for: .seconds(2))
+      await MainActor.run {
+        copiedFeedbackSummary = false
+      }
     }
   }
 
