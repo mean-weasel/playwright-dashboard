@@ -95,7 +95,7 @@ struct AppDiagnosticsSnapshot: Equatable {
     return lines.joined(separator: "\n")
   }
 
-  private static func formattedDate(_ date: Date) -> String {
+  static func formattedDate(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter.string(from: date)
