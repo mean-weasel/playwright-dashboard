@@ -86,6 +86,9 @@ RUN_GUI_SMOKE=1 make smoke-app
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
+RUN_MULTI_SESSION_SMOKE=1 make smoke-multi-session
+RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
+RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 RUN_LOGIN_ITEM_SMOKE=1 make smoke-login-item
 RUN_LIVE_CDP_SMOKE=1 make smoke-live-cdp
 ```
