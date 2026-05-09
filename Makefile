@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -224,6 +224,15 @@ smoke-multi-session:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	scripts/smoke_multi_session.mjs
+
+smoke-safe-mode-observer:
+	@if [ "$$RUN_SAFE_MODE_OBSERVER_SMOKE" != "1" ]; then \
+		echo "Set RUN_SAFE_MODE_OBSERVER_SMOKE=1 to run the Safe-mode observer GUI smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
+	scripts/smoke_safe_mode_observer.mjs
 
 visual-snapshots:
 	$(MAKE) check-accessibility

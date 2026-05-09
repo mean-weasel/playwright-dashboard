@@ -23,6 +23,7 @@ on:
           - fallback
           - recording
           - multi
+          - safe-observer
           - both
           - all
 
@@ -406,6 +407,42 @@ jobs:
           name: gui-smoke-multi-session-artifacts
           path: |
             dist/gui-smoke-multi-session-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+
+  gui-smoke-safe-mode-observer:
+    name: GUI Smoke Safe Mode Observer
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: [package-check]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-check.result == 'success' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.gui_smoke_mode == 'safe-observer' || inputs.gui_smoke_mode == 'all')))
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for Safe-mode observer GUI smoke."
+            exit 1
+          fi
+      - name: Run Safe-mode observer smoke
+        env:
+          RUN_SAFE_MODE_OBSERVER_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-safe-mode-observer-artifacts
+        run: make smoke-safe-mode-observer
+      - name: Upload Safe-mode observer smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gui-smoke-safe-mode-observer-artifacts
+          path: |
+            dist/gui-smoke-safe-mode-observer-artifacts/**
             dist/PlaywrightDashboard.zip
           if-no-files-found: ignore
 
