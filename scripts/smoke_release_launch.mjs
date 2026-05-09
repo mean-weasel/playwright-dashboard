@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 
 const appPath = process.argv[2];
@@ -9,16 +9,50 @@ if (!appPath) {
 }
 
 const resolvedAppPath = path.resolve(appPath);
+const executablePath = path.join(
+  resolvedAppPath,
+  "Contents",
+  "MacOS",
+  "PlaywrightDashboard",
+);
 const processName = "PlaywrightDashboard";
+const launchTimeoutMs = Number(process.env.RELEASE_LAUNCH_TIMEOUT_MS ?? 90_000);
+const quitTimeoutMs = Number(process.env.RELEASE_QUIT_TIMEOUT_MS ?? 30_000);
+
+let directProcess = null;
 
 try {
+  log("Cleaning up existing app process");
   await run("pkill", ["-x", processName]).catch(() => {});
   await sleep(1_000);
-  await run("open", [resolvedAppPath]);
-  await waitForProcess(processName, 30_000);
-  await run("osascript", ["-e", `tell application "${processName}" to quit`]);
-  await waitForExit(processName, 15_000);
+
+  log(`Launching app through LaunchServices: ${resolvedAppPath}`);
+  await run("open", ["-n", resolvedAppPath]);
+  try {
+    await waitForProcess(processName, launchTimeoutMs);
+  } catch (error) {
+    log(`LaunchServices did not expose ${processName}: ${error.message}`);
+    log("Trying direct executable fallback");
+    directProcess = spawn(executablePath, [], {
+      detached: true,
+      stdio: "ignore",
+    });
+    directProcess.unref();
+    await waitForProcess(processName, Math.min(30_000, launchTimeoutMs));
+  }
+
+  log("Quitting app");
+  await run("osascript", ["-e", `tell application "${processName}" to quit`]).catch(
+    (error) => log(`AppleScript quit failed: ${error.message}`),
+  );
+  if (directProcess && directProcess.exitCode === null) {
+    directProcess.kill("SIGTERM");
+  }
+  await waitForExit(processName, quitTimeoutMs);
   console.log(`Release launch smoke passed for ${resolvedAppPath}`);
+} catch (error) {
+  console.error(await diagnostics(error));
+  throw error;
 } finally {
   await run("pkill", ["-x", processName]).catch(() => {});
 }
@@ -60,4 +94,32 @@ function run(command, args) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function diagnostics(error) {
+  const [processes, bundleInfo, quarantine] = await Promise.all([
+    run("ps", ["-axo", "pid,ppid,etime,command"]).catch((diagError) => diagError.message),
+    run("/usr/libexec/PlistBuddy", [
+      "-c",
+      "Print :CFBundleExecutable",
+      path.join(resolvedAppPath, "Contents", "Info.plist"),
+    ]).catch((diagError) => diagError.message),
+    run("xattr", ["-l", resolvedAppPath]).catch((diagError) => diagError.message),
+  ]);
+  return [
+    `Release launch smoke failed: ${error.message}`,
+    `app=${resolvedAppPath}`,
+    `executable=${executablePath}`,
+    `CFBundleExecutable=${bundleInfo.trim()}`,
+    `xattr=${quarantine.trim() || "<none>"}`,
+    "matching processes:",
+    processes
+      .split("\n")
+      .filter((line) => line.includes(processName))
+      .join("\n") || "<none>",
+  ].join("\n");
+}
+
+function log(message) {
+  console.log(`[release-smoke] ${message}`);
 }
