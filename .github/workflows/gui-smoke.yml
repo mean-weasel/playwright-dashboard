@@ -13,6 +13,7 @@ on:
           - fallback
           - recording
           - multi
+          - safe-observer
           - both
           - all
 
@@ -67,6 +68,13 @@ jobs:
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
         if: inputs.mode == 'multi' || inputs.mode == 'all'
         run: make smoke-multi-session
+
+      - name: Run Safe-mode observer smoke
+        env:
+          RUN_SAFE_MODE_OBSERVER_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-artifacts
+        if: inputs.mode == 'safe-observer' || inputs.mode == 'all'
+        run: make smoke-safe-mode-observer
 
       - name: Collect recording export artifacts
         if: always()
