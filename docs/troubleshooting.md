@@ -51,7 +51,8 @@ view is polling screenshots instead.
 - For normal live smoke, expect the badge to reach `Live screencast`.
 - Check whether the CDP port responds and whether Chrome is still alive.
 - Capture `SMOKE_ARTIFACT_DIR=dist/gui-smoke-artifacts` when debugging GUI smoke
-  failures.
+  failures. Chrome-backed multi-session smokes also print `[smoke]` progress
+  lines and write `progress.log` in their artifact directory when they fail.
 
 ## GUI Smoke Or Visual Snapshots Fail With Permission Errors
 

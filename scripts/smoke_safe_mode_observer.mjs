@@ -22,6 +22,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR
 const chromePath =
   process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const accessibilityHelp = staticAccessibilityHelp();
+const appleScriptTimeoutMs = Number(process.env.SMOKE_APPLESCRIPT_TIMEOUT_MS ?? 90_000);
 const tmpRoot = await fsTempDir("playwright-dashboard-safe-observer-smoke-");
 const daemonRoot = path.join(tmpRoot, "daemon");
 const smokeId = String(process.pid);
@@ -39,14 +40,19 @@ const specs = ["alpha", "bravo", "charlie"].map((slug, index) => ({
 }));
 
 let appOpened = false;
+const progress = [];
 
 await runGuiPreflight();
+logProgress("Accessibility preflight passed");
 
 try {
+  logProgress("Cleaning up existing app process");
   await run("pkill", ["-x", "PlaywrightDashboard"]).catch(() => {});
   await sleep(1_000);
 
+  logProgress("Creating Chrome-backed session fixtures");
   for (const spec of specs) {
+    logProgress(`Starting ${spec.label}`);
     spec.server = await startSessionServer(spec);
     spec.debugPort = await freePort();
     spec.chromeProcess = spawn(chromePath, [
@@ -62,8 +68,10 @@ try {
       return pages.some((page) => page.url === spec.server.rootURL);
     }, `${spec.label} Chrome CDP page`);
     await createSessionFile(spec);
+    logProgress(`${spec.label} session file ready on CDP port ${spec.debugPort}`);
   }
 
+  logProgress("Disabling persisted control mode default");
   await run("defaults", [
     "write",
     "com.neonwatty.PlaywrightDashboard",
@@ -72,11 +80,14 @@ try {
     "false",
   ]);
 
+  logProgress("Opening safe dashboard");
   await launchApp();
   await runAppleScript(waitForSafeDashboardScript(specs));
   await quitApp();
+  logProgress("Safe dashboard verified");
 
   for (const spec of specs) {
+    logProgress(`Opening ${spec.label} in Safe mode`);
     await launchApp(spec.sessionId);
     await runAppleScript(waitForSafeExpandedSessionScript());
     await waitFor(async () => {
@@ -84,10 +95,12 @@ try {
       return pages.some((page) => page.url === spec.server.rootURL);
     }, `${spec.label} root page remains selected`);
     await quitApp();
+    logProgress(`${spec.label} Safe mode expanded view verified`);
   }
 
   const controlled = specs[0];
   const untouched = specs.slice(1);
+  logProgress(`Verifying ${controlled.label} does not navigate or forward input in Safe mode`);
   await launchApp(controlled.sessionId);
   const surface = parsePointResult(await runAppleScript(waitForSafeExpandedSessionScript()));
   await sleep(2_000);
@@ -106,6 +119,7 @@ try {
   }
   await quitApp();
 
+  logProgress(`Switching ${controlled.label} to Control mode`);
   await setExpandedInteractionEnabled(true);
   await launchApp(controlled.sessionId, false);
   await runAppleScript(waitForControlExpandedSessionScript());
@@ -117,6 +131,7 @@ try {
   );
   await quitApp();
 
+  logProgress(`Returning ${controlled.label} to Safe mode`);
   await setExpandedInteractionEnabled(false);
   await launchApp(controlled.sessionId, true);
   await runAppleScript(waitForSafeExpandedSessionScript());
@@ -135,6 +150,7 @@ try {
     }
   }
 
+  logProgress("Safe-mode observer smoke assertions passed");
   console.log("Safe-mode observer smoke passed");
 } catch (error) {
   await writeSmokeArtifacts(error);
@@ -629,6 +645,7 @@ async function writeSmokeArtifacts(error) {
     `${error?.stack || error?.message || String(error)}\n`,
     "utf8",
   );
+  await writeFile(path.join(artifactDir, "progress.log"), `${progress.join("\n")}\n`, "utf8");
   await writeFile(path.join(artifactDir, "events.json"), `${JSON.stringify(specs, eventReplacer, 2)}\n`);
   const snapshot = await runAppleScript(uiSnapshotScript()).catch(
     (snapshotError) => `Unable to collect UI snapshot: ${snapshotError.message}`,
@@ -681,6 +698,7 @@ return output
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
+    const timeout = options.timeout;
     execFile(
       command,
       args,
@@ -688,9 +706,11 @@ function run(command, args, options = {}) {
       (error, stdout, stderr) => {
         if (error) {
           const output = stderr || stdout || error.message;
+          const timedOut = timeout && error.killed;
+          const failure = timedOut ? `timed out after ${timeout}ms: ${output}` : `failed: ${output}`;
           const message = isAccessibilityDenied(output)
             ? `${accessibilityHelp}\n\n${output}`
-            : `${command} failed: ${output}`;
+            : `${command} ${failure}`;
           reject(new Error(message));
           return;
         }
@@ -701,7 +721,7 @@ function run(command, args, options = {}) {
 }
 
 function runAppleScript(script) {
-  return run("osascript", ["-e", script], { timeout: 240_000 });
+  return run("osascript", ["-e", script], { timeout: appleScriptTimeoutMs });
 }
 
 async function waitFor(predicate, label, timeoutMs = 30_000) {
@@ -737,6 +757,12 @@ async function fsTempDir(prefix) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logProgress(message) {
+  const entry = `${new Date().toISOString()} ${message}`;
+  progress.push(entry);
+  console.log(`[smoke] ${message}`);
 }
 
 function titleCase(value) {

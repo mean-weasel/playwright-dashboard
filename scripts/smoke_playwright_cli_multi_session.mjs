@@ -20,6 +20,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR
   ? path.resolve(process.env.SMOKE_ARTIFACT_DIR)
   : null;
 const accessibilityHelp = staticAccessibilityHelp();
+const appleScriptTimeoutMs = Number(process.env.SMOKE_APPLESCRIPT_TIMEOUT_MS ?? 90_000);
 const tmpRoot = await fsTempDir("playwright-dashboard-cli-multi-smoke-");
 const daemonRoot = path.join(tmpRoot, "daemon");
 const workspaceDir = path.join(tmpRoot, "workspace");
@@ -43,22 +44,30 @@ const specs = ["alpha", "bravo", "charlie"].map((slug, index) => ({
 }));
 
 let appOpened = false;
+const progress = [];
 
 await runGuiPreflight();
+logProgress("Accessibility preflight passed");
 
 try {
+  logProgress("Cleaning up existing app process");
   await run("pkill", ["-x", "PlaywrightDashboard"]).catch(() => {});
   await sleep(1_000);
   await mkdir(path.join(workspaceDir, ".playwright"), { recursive: true });
+  logProgress("Checking playwright-cli availability");
   await ensurePlaywrightCLI();
 
+  logProgress("Opening real Playwright CLI sessions");
   for (const spec of specs) {
+    logProgress(`Opening ${spec.label}`);
     spec.server = await startSessionServer(spec);
     await openPlaywrightSession(spec, spec.server.rootURL);
     await loadRealSessionFile(spec);
     await waitForCDPURL(spec, spec.server.rootURL, `${spec.label} Chrome CDP page`);
+    logProgress(`${spec.label} ready with session ${spec.sessionId}`);
   }
 
+  logProgress("Disabling persisted control mode default");
   await run("defaults", [
     "write",
     "com.neonwatty.PlaywrightDashboard",
@@ -67,25 +76,31 @@ try {
     "false",
   ]);
 
+  logProgress("Opening safe dashboard");
   await launchApp();
   await runAppleScript(waitForDashboardCardsScript(specs));
   await quitApp();
+  logProgress("Dashboard cards verified");
 
   for (const spec of specs) {
+    logProgress(`Opening ${spec.label} expanded view`);
     await launchApp(spec.sessionId);
     await runAppleScript(waitForExpandedSessionScript());
     await waitForCDPURL(spec, spec.server.rootURL, `${spec.label} root page remains selected`);
     await quitApp();
+    logProgress(`${spec.label} expanded view verified`);
   }
 
   const controlled = specs[0];
   const untouched = specs.slice(1);
+  logProgress(`Navigating ${controlled.label} through playwright-cli`);
   await runPlaywrightCLI([`-s=${controlled.sessionId}`, "goto", controlled.server.nextURL], {
     cwd: workspaceDir,
   });
   await waitForEvent(controlled, (event) => event.path === "/next", `${controlled.label} /next`);
   await waitForCDPURL(controlled, controlled.server.nextURL, `${controlled.label} CDP URL update`);
 
+  logProgress(`Opening ${controlled.label} after CLI navigation`);
   await launchApp(controlled.sessionId);
   await runAppleScript(waitForExpandedURLScript(controlled.server.nextURL));
   await quitApp();
@@ -96,6 +111,7 @@ try {
     }
   }
 
+  logProgress("Playwright CLI multi-session smoke assertions passed");
   console.log("Playwright CLI multi-session smoke passed");
 } catch (error) {
   await writeSmokeArtifacts(error);
@@ -372,6 +388,7 @@ async function writeSmokeArtifacts(error) {
     `${error?.stack || error?.message || String(error)}\n`,
     "utf8",
   );
+  await writeFile(path.join(artifactDir, "progress.log"), `${progress.join("\n")}\n`, "utf8");
   await writeFile(path.join(artifactDir, "events.json"), `${JSON.stringify(specs, eventReplacer, 2)}\n`);
   const snapshot = await runAppleScript(uiSnapshotScript()).catch(
     (snapshotError) => `Unable to collect UI snapshot: ${snapshotError.message}`,
@@ -424,6 +441,7 @@ return output
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
+    const timeout = options.timeout;
     execFile(
       command,
       args,
@@ -431,9 +449,11 @@ function run(command, args, options = {}) {
       (error, stdout, stderr) => {
         if (error) {
           const output = stderr || stdout || error.message;
+          const timedOut = timeout && error.killed;
+          const failure = timedOut ? `timed out after ${timeout}ms: ${output}` : `failed: ${output}`;
           const message = isAccessibilityDenied(output)
             ? `${accessibilityHelp}\n\n${output}`
-            : `${command} failed: ${output}`;
+            : `${command} ${failure}`;
           reject(new Error(message));
           return;
         }
@@ -444,7 +464,7 @@ function run(command, args, options = {}) {
 }
 
 function runAppleScript(script) {
-  return run("osascript", ["-e", script], { timeout: 120_000 });
+  return run("osascript", ["-e", script], { timeout: appleScriptTimeoutMs });
 }
 
 function runPlaywrightCLI(args, options = {}) {
@@ -477,6 +497,12 @@ async function fsTempDir(prefix) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logProgress(message) {
+  const entry = `${new Date().toISOString()} ${message}`;
+  progress.push(entry);
+  console.log(`[smoke] ${message}`);
 }
 
 function titleCase(value) {

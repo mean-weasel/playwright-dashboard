@@ -104,6 +104,7 @@ writer and MP4 exporter used by the UI, and validates `manifest.json`,
 When `SMOKE_ARTIFACT_DIR` is set, the smoke test writes:
 
 - `error.txt`
+- `progress.log`
 - `events.json`
 - `ui-snapshot.txt`
 - `surface-before.png` and `surface-after.png` when available
