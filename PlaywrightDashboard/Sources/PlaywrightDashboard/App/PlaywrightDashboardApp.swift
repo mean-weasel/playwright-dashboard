@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftData
 import SwiftUI
 
@@ -9,6 +10,7 @@ import SwiftUI
 struct PlaywrightDashboardApp: App {
   @State private var appState: AppState
   private let modelContainer: ModelContainer
+  private let smokeArguments: SmokeLaunchArguments
 
   private var activeSessionCount: Int {
     appState.sessions.filter { $0.status != .closed }.count
@@ -52,9 +54,17 @@ struct PlaywrightDashboardApp: App {
     if let sessionId = smokeArguments.selectedSessionId {
       state.selectedSessionId = sessionId
     }
+    if smokeArguments.opensDashboard || smokeArguments.opensSettings {
+      NSApplication.shared.setActivationPolicy(.regular)
+    }
 
     self.modelContainer = container
+    self.smokeArguments = smokeArguments
     self._appState = State(initialValue: state)
+    SmokeReadinessReporter.configure(
+      directory: smokeArguments.readinessDirectory,
+      navigationURL: smokeArguments.navigationURL
+    )
 
     if smokeArguments.opensDashboard {
       Self.openSmokeDashboardWindow(
@@ -132,7 +142,7 @@ private struct DetachedSessionWindow: View {
 
 extension PlaywrightDashboardApp {
   private var dashboardWindow: some View {
-    DashboardWindow()
+    DashboardWindow(initialFilter: smokeArguments.dashboardFilter)
       .environment(appState)
       .onAppear {
         appState.isDashboardOpen = true
@@ -147,9 +157,8 @@ extension PlaywrightDashboardApp {
     modelContainer: ModelContainer,
     initialFilter: SidebarFilter?
   ) {
-    DispatchQueue.main.async {
-      NSApplication.shared.setActivationPolicy(.regular)
-      NSApplication.shared.activate(ignoringOtherApps: true)
+    scheduleSmokeWindowOpen {
+      makeSmokeProcessForeground()
       appState.isDashboardOpen = true
 
       let rootView = DashboardWindow(initialFilter: initialFilter)
@@ -163,18 +172,25 @@ extension PlaywrightDashboardApp {
         defer: false
       )
       window.title = "Playwright Dashboard"
+      window.setAccessibilityElement(true)
+      window.setAccessibilityRole(.window)
+      window.setAccessibilitySubrole(.standardWindow)
+      window.setAccessibilityTitle("Playwright Dashboard")
       window.center()
-      window.contentView = NSHostingView(rootView: rootView)
+      window.collectionBehavior = [.moveToActiveSpace]
+      window.isReleasedWhenClosed = false
+      window.contentViewController = NSHostingController(rootView: rootView)
       window.makeKeyAndOrderFront(nil)
+      window.orderFrontRegardless()
+      NSApplication.shared.activate(ignoringOtherApps: true)
       smokeDashboardWindow = window
     }
   }
 
   @MainActor
   private static func openSmokeSettingsWindow(appState: AppState) {
-    DispatchQueue.main.async {
-      NSApplication.shared.setActivationPolicy(.regular)
-      NSApplication.shared.activate(ignoringOtherApps: true)
+    scheduleSmokeWindowOpen {
+      makeSmokeProcessForeground()
 
       let rootView = SettingsView()
         .environment(appState)
@@ -186,10 +202,41 @@ extension PlaywrightDashboardApp {
         defer: false
       )
       window.title = "Settings"
+      window.setAccessibilityElement(true)
+      window.setAccessibilityRole(.window)
+      window.setAccessibilitySubrole(.standardWindow)
+      window.setAccessibilityTitle("Settings")
       window.center()
-      window.contentView = NSHostingView(rootView: rootView)
+      window.collectionBehavior = [.moveToActiveSpace]
+      window.isReleasedWhenClosed = false
+      window.contentViewController = NSHostingController(rootView: rootView)
       window.makeKeyAndOrderFront(nil)
+      window.orderFrontRegardless()
+      NSApplication.shared.activate(ignoringOtherApps: true)
       smokeSettingsWindow = window
     }
+  }
+
+  @MainActor
+  private static func scheduleSmokeWindowOpen(_ action: @escaping @MainActor () -> Void) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+      Task { @MainActor in
+        action()
+      }
+    }
+  }
+
+  @MainActor
+  private static func makeSmokeProcessForeground() {
+    var psn = ProcessSerialNumber(highLongOfPSN: 0, lowLongOfPSN: UInt32(kCurrentProcess))
+    TransformProcessType(
+      &psn,
+      ProcessApplicationTransformState(kProcessTransformToForegroundApplication))
+    NSApplication.shared.setActivationPolicy(.regular)
+    if NSApplication.shared.mainMenu == nil {
+      NSApplication.shared.mainMenu = NSMenu(title: "Main Menu")
+    }
+    NSApplication.shared.unhide(nil)
+    NSApplication.shared.activate(ignoringOtherApps: true)
   }
 }
