@@ -24,11 +24,8 @@ expanded session view backed by CDP screencast or screenshot fallback.
 The latest notarized macOS build is available from
 [GitHub Releases](https://github.com/neonwatty/playwright-dashboard/releases/latest).
 
-Current release:
-
-- `PlaywrightDashboard-v0.1.1-3.zip`
-- SHA-256:
-  `8540c9ceeb5b81bf90c81d6e33d7de4424cd34081111cd8c25bb08dbc6978580`
+Download the `PlaywrightDashboard-v<version>-<build>.zip` asset and its
+`.sha256` companion from the latest release.
 
 The release artifact is Developer ID signed, notarized, stapled, and verified
 with Gatekeeper.
@@ -67,7 +64,7 @@ signature, and creates `dist/PlaywrightDashboard.zip`.
 Create a local beta artifact after the standard QA gate:
 
 ```sh
-make beta-release APP_VERSION=0.1.1 BUILD_NUMBER=1
+make beta-release APP_VERSION=0.1.2 BUILD_NUMBER=1
 ```
 
 For a notarized external beta, configure an `xcrun notarytool` keychain profile
@@ -78,7 +75,7 @@ xcrun notarytool store-credentials playwright-dashboard \
   --team-id 3CDYUL285D
 
 make notarized-release \
-  APP_VERSION=0.1.1 \
+  APP_VERSION=0.1.2 \
   BUILD_NUMBER=1 \
   NOTARY_PROFILE=playwright-dashboard
 ```
