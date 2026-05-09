@@ -69,7 +69,7 @@ actor CDPTargetMonitor {
   }
 
   private func browserWebSocketURL() async throws -> URL {
-    let url = URL(string: "http://localhost:\(port)/json/version")!
+    let url = try CDPClient.cdpHTTPURL(port: port, path: "/json/version")
     let (data, response) = try await withTimeout {
       try await self.session.data(from: url)
     }
@@ -80,10 +80,10 @@ actor CDPTargetMonitor {
     }
 
     let version = try JSONDecoder().decode(BrowserVersion.self, from: data)
-    guard let url = URL(string: version.webSocketDebuggerUrl) else {
-      throw CDPClient.CDPError.invalidResponse
-    }
-    return url
+    return try CDPClient.validatedWebSocketDebuggerURL(
+      version.webSocketDebuggerUrl,
+      sourceURL: url
+    )
   }
 
   private func sendWebSocketText(_ text: String, to webSocket: URLSessionWebSocketTask) async throws

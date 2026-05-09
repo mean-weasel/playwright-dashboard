@@ -2,6 +2,8 @@ import Foundation
 
 /// Decoded representation of a Playwright `.session` JSON file on disk.
 struct SessionFileConfig: Codable, Sendable {
+  static let maximumStringFieldLength = 4096
+
   let name: String
   let version: String
   let timestamp: Int
@@ -17,6 +19,17 @@ struct SessionFileConfig: Codable, Sendable {
   struct BrowserConfig: Codable, Sendable {
     let browserName: String
     let launchOptions: LaunchOptions
+
+    init(browserName: String, launchOptions: LaunchOptions) {
+      self.browserName = browserName
+      self.launchOptions = launchOptions
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      browserName = try container.decodeBoundedString(forKey: .browserName)
+      launchOptions = try container.decode(LaunchOptions.self, forKey: .launchOptions)
+    }
 
     struct LaunchOptions: Codable, Sendable {
       let headless: Bool?
@@ -40,8 +53,19 @@ struct SessionFileConfig: Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         headless = try container.decodeIfPresent(Bool.self, forKey: .headless)
         chromiumSandbox = try container.decodeIfPresent(Bool.self, forKey: .chromiumSandbox)
-        cdpPort = try container.decodeIfPresent(Int.self, forKey: .cdpPort)
-        args = try container.decodeIfPresent([String].self, forKey: .args) ?? []
+        if let decodedPort = try container.decodeIfPresent(Int.self, forKey: .cdpPort) {
+          guard (1...65_535).contains(decodedPort) else {
+            throw DecodingError.dataCorruptedError(
+              forKey: .cdpPort,
+              in: container,
+              debugDescription: "cdpPort must be between 1 and 65535"
+            )
+          }
+          cdpPort = decodedPort
+        } else {
+          cdpPort = nil
+        }
+        args = try container.decodeStringArrayIfPresent(forKey: .args) ?? []
       }
     }
   }
@@ -68,11 +92,11 @@ struct SessionFileConfig: Codable, Sendable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    name = try container.decode(String.self, forKey: .name)
-    version = try container.decode(String.self, forKey: .version)
+    name = try container.decodeBoundedString(forKey: .name)
+    version = try container.decodeBoundedString(forKey: .version)
     timestamp = try container.decode(Int.self, forKey: .timestamp)
-    socketPath = try container.decode(String.self, forKey: .socketPath)
-    workspaceDir = try container.decodeIfPresent(String.self, forKey: .workspaceDir) ?? ""
+    socketPath = try container.decodeBoundedString(forKey: .socketPath)
+    workspaceDir = try container.decodeBoundedStringIfPresent(forKey: .workspaceDir) ?? ""
     cli = try container.decode(CLIConfig.self, forKey: .cli)
     browser = try container.decode(BrowserConfig.self, forKey: .browser)
   }
@@ -87,9 +111,45 @@ struct SessionFileConfig: Codable, Sendable {
     for arg in browser.launchOptions.args {
       if arg.hasPrefix(prefix) {
         let portString = String(arg.dropFirst(prefix.count))
-        return Int(portString)
+        guard let port = Int(portString), (1...65_535).contains(port) else {
+          return nil
+        }
+        return port
       }
     }
     return nil
+  }
+}
+
+extension KeyedDecodingContainer {
+  fileprivate func decodeBoundedString(forKey key: Key) throws -> String {
+    let value = try decode(String.self, forKey: key)
+    try validateStringLength(value, forKey: key)
+    return value
+  }
+
+  fileprivate func decodeBoundedStringIfPresent(forKey key: Key) throws -> String? {
+    guard let value = try decodeIfPresent(String.self, forKey: key) else { return nil }
+    try validateStringLength(value, forKey: key)
+    return value
+  }
+
+  fileprivate func decodeStringArrayIfPresent(forKey key: Key) throws -> [String]? {
+    guard let values = try decodeIfPresent([String].self, forKey: key) else { return nil }
+    for value in values {
+      try validateStringLength(value, forKey: key)
+    }
+    return values
+  }
+
+  fileprivate func validateStringLength(_ value: String, forKey key: Key) throws {
+    guard value.count <= SessionFileConfig.maximumStringFieldLength else {
+      throw DecodingError.dataCorruptedError(
+        forKey: key,
+        in: self,
+        debugDescription:
+          "\(key.stringValue) exceeds maximum length of \(SessionFileConfig.maximumStringFieldLength)"
+      )
+    }
   }
 }

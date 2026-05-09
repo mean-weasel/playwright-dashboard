@@ -84,16 +84,19 @@ extension CDPClient {
   ) async throws {
     let pages = try await listPages()
     let pageTargets = CDPPageTargetSelection.selectableTargets(from: pages)
+    let sourceURL = try Self.cdpHTTPURL(port: port, path: "/json/list")
     guard
       let pageTarget = CDPPageTargetSelection.selectedTarget(
         from: pageTargets,
         preferredTargetId: nil
-      ),
-      let wsURLString = pageTarget.webSocketDebuggerUrl,
-      let wsURL = URL(string: wsURLString)
+      )
     else {
       throw CDPError.noPages
     }
+    let wsURL = try Self.validatedWebSocketDebuggerURL(
+      pageTarget.webSocketDebuggerUrl,
+      sourceURL: sourceURL
+    )
 
     let ws = session.webSocketTask(with: wsURL)
     ws.resume()

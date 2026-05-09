@@ -118,16 +118,19 @@ actor CDPPageConnection {
     let client = CDPClient(port: port, requestTimeout: requestTimeout)
     let pages = try await client.listPages()
     let selectableTargets = CDPPageTargetSelection.selectableTargets(from: pages)
+    let sourceURL = try CDPClient.cdpHTTPURL(port: port, path: "/json/list")
     guard
       let selectedTarget = CDPPageTargetSelection.selectedTarget(
         from: selectableTargets,
         preferredTargetId: targetId
-      ),
-      let wsURLString = selectedTarget.webSocketDebuggerUrl,
-      let wsURL = URL(string: wsURLString)
+      )
     else {
       throw CDPClient.CDPError.noPages
     }
+    let wsURL = try CDPClient.validatedWebSocketDebuggerURL(
+      selectedTarget.webSocketDebuggerUrl,
+      sourceURL: sourceURL
+    )
 
     pageTarget = selectedTarget
     pageTargets = selectableTargets
