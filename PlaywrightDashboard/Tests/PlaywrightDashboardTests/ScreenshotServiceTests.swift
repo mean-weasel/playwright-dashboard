@@ -9,7 +9,7 @@ struct ScreenshotServiceTests {
 
   @Test("skips selected expanded session")
   func skipsSelectedExpandedSession() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["expanded": 9301, "thumbnail": 9302],
       outcomesByPort: [
         9301: .success(jpeg: Data([0x01]), url: "http://expanded.test", title: "Expanded"),
@@ -32,7 +32,7 @@ struct ScreenshotServiceTests {
 
   @Test("updates successful screenshot results")
   func updatesSuccessfulScreenshotResults() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["active": 9311],
       outcomesByPort: [
         9311: .success(jpeg: Data([0xA1, 0xB2]), url: "http://app.test", title: "App")
@@ -52,7 +52,7 @@ struct ScreenshotServiceTests {
 
   @Test("passes selected target id to thumbnail capture")
   func passesSelectedTargetIdToThumbnailCapture() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["active": 9315],
       outcomesByPort: [
         9315: .success(jpeg: Data([0xA1]), url: "http://app.test", title: "App")
@@ -72,7 +72,7 @@ struct ScreenshotServiceTests {
 
   @Test("marks stale after capture failure")
   func marksStaleAfterCaptureFailure() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["old": 9321],
       outcomesByPort: [9321: .failure],
       staleThreshold: 60
@@ -92,7 +92,7 @@ struct ScreenshotServiceTests {
 
   @Test("ignores closed and closing sessions")
   func ignoresClosedAndClosingSessions() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["closed": 9331, "closing": 9332, "open": 9333],
       outcomesByPort: [
         9331: .success(jpeg: Data([0x01]), url: "http://closed.test", title: "Closed"),
@@ -118,7 +118,7 @@ struct ScreenshotServiceTests {
 
   @Test("saves only when changes occur")
   func savesOnlyWhenChangesOccur() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["unchanged": 9341],
       outcomesByPort: [9341: .failure],
       staleThreshold: 0
@@ -138,7 +138,7 @@ struct ScreenshotServiceTests {
 
   @Test("handles multiple sessions in one capture cycle")
   func handlesMultipleSessions() async throws {
-    let fixture = try makeFixture(
+    let fixture = try await makeFixture(
       portsBySessionId: ["first": 9351, "second": 9352, "stale": 9353],
       outcomesByPort: [
         9351: .success(jpeg: Data([0x11]), url: "http://first.test", title: "First"),
@@ -165,11 +165,58 @@ struct ScreenshotServiceTests {
     #expect(fixture.saveCounter.count == 1)
   }
 
+  @Test("backs off failed ports and skips them until retry time")
+  func backsOffFailedPorts() async throws {
+    let clock = DateBox(Date(timeIntervalSince1970: 1_000))
+    let fixture = try await makeFixture(
+      portsBySessionId: ["flaky": 9361],
+      outcomesByPort: [9361: .failure],
+      nowProvider: { clock.now }
+    )
+    defer { fixture.appState.stopSync() }
+
+    await fixture.service.captureAll(appState: fixture.appState)
+    await fixture.service.captureAll(appState: fixture.appState)
+
+    #expect(await fixture.recorder.capturedPorts() == [9361])
+    #expect(fixture.service.captureFailureCount == 1)
+    #expect(fixture.service.skippedForBackoffCount == 1)
+    #expect(fixture.service.backoffPortCount == 1)
+
+    clock.now = Date(timeIntervalSince1970: 1_006)
+    await fixture.service.captureAll(appState: fixture.appState)
+
+    #expect(await fixture.recorder.capturedPorts() == [9361, 9361])
+    #expect(fixture.service.captureFailureCount == 2)
+  }
+
+  @Test("evicts clients for ports no longer targeted")
+  func evictsStaleClients() async throws {
+    let fixture = try await makeFixture(
+      portsBySessionId: ["open": 9371],
+      outcomesByPort: [
+        9371: .success(jpeg: Data([0x71]), url: "http://open.test", title: "Open")
+      ]
+    )
+    defer { fixture.appState.stopSync() }
+
+    await fixture.service.captureAll(appState: fixture.appState)
+    #expect(fixture.service.activeClientCount == 1)
+
+    let session = try #require(fixture.session("open"))
+    session.status = .closed
+    await fixture.service.captureAll(appState: fixture.appState)
+
+    #expect(fixture.service.activeClientCount == 0)
+  }
+
   private func makeFixture(
     portsBySessionId: [String: Int],
     outcomesByPort: [Int: CaptureOutcome],
-    staleThreshold: TimeInterval = 300
-  ) throws -> ScreenshotServiceFixture {
+    staleThreshold: TimeInterval = 300,
+    maxConcurrentCaptures: Int = 4,
+    nowProvider: @escaping @MainActor () -> Date = { Date() }
+  ) async throws -> ScreenshotServiceFixture {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(
       files: try portsBySessionId.sorted(by: { $0.key < $1.key })
@@ -188,6 +235,7 @@ struct ScreenshotServiceTests {
       modelContextSaver: { _ in saveCounter.count += 1 }
     )
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
 
     let recorder = CaptureRecorder()
     let service = ScreenshotService(
@@ -198,7 +246,9 @@ struct ScreenshotServiceTests {
           recorder: recorder
         )
       },
-      staleThresholdProvider: { staleThreshold }
+      staleThresholdProvider: { staleThreshold },
+      maxConcurrentCaptures: maxConcurrentCaptures,
+      nowProvider: nowProvider
     )
 
     return ScreenshotServiceFixture(
@@ -254,6 +304,15 @@ private actor CaptureRecorder {
       if lhs.port != rhs.port { return lhs.port < rhs.port }
       return (lhs.targetId ?? "") < (rhs.targetId ?? "")
     }
+  }
+}
+
+@MainActor
+private final class DateBox {
+  var now: Date
+
+  init(_ now: Date) {
+    self.now = now
   }
 }
 

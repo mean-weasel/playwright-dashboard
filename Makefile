@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -242,6 +242,13 @@ smoke-playwright-cli-multi-session:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	scripts/smoke_playwright_cli_multi_session.mjs
+
+smoke-release-launch:
+	@if [ "$$RUN_RELEASE_LAUNCH_SMOKE" != "1" ]; then \
+		echo "Set RUN_RELEASE_LAUNCH_SMOKE=1 to launch-check a packaged macOS app"; \
+		exit 2; \
+	fi
+	scripts/smoke_release_launch.mjs "$${RELEASE_APP_PATH:-$(PACKAGE_BUNDLE)}"
 
 visual-snapshots:
 	$(MAKE) check-accessibility

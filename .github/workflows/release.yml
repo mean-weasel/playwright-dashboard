@@ -227,14 +227,20 @@ jobs:
 
           codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/PlaywrightDashboard.app"
           spctl --assess --type execute --verbose=4 "$VERIFY_DIR/PlaywrightDashboard.app"
+          RUN_RELEASE_LAUNCH_SMOKE=1 \
+            RELEASE_APP_PATH="$VERIFY_DIR/PlaywrightDashboard.app" \
+            make smoke-release-launch
 
           cp dist/PlaywrightDashboard.zip "dist/$ARTIFACT_NAME"
+          shasum -a 256 "dist/$ARTIFACT_NAME" > "dist/$ARTIFACT_NAME.sha256"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.metadata.outputs.artifact_name }}
-          path: dist/${{ steps.metadata.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.metadata.outputs.artifact_name }}
+            dist/${{ steps.metadata.outputs.artifact_name }}.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -251,4 +257,7 @@ jobs:
               --notes "Notarized Playwright Dashboard release $GITHUB_REF_NAME."
           fi
 
-          gh release upload "$GITHUB_REF_NAME" "dist/${{ steps.metadata.outputs.artifact_name }}" --clobber
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/${{ steps.metadata.outputs.artifact_name }}" \
+            "dist/${{ steps.metadata.outputs.artifact_name }}.sha256" \
+            --clobber

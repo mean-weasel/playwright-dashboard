@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SessionEmptyState: View {
@@ -26,24 +27,44 @@ struct SessionEmptyState: View {
       }
 
       if showsSetupActions {
-        HStack(spacing: 10) {
-          Button {
-            openSettings()
-          } label: {
-            Label("Check Settings", systemImage: "gearshape")
-          }
+        VStack(spacing: 12) {
+          setupCommand
 
-          Button {
-            appState.refreshPlaywrightCLIStatus()
-          } label: {
-            Label("Recheck CLI", systemImage: "arrow.clockwise")
+          HStack(spacing: 10) {
+            Button {
+              openSettings()
+            } label: {
+              Label("Check Settings", systemImage: "gearshape")
+            }
+
+            Button {
+              appState.refreshPlaywrightCLIStatus()
+            } label: {
+              Label("Recheck CLI", systemImage: "arrow.clockwise")
+            }
+
+            Button {
+              copySetupCommand()
+            } label: {
+              Label("Copy Start Command", systemImage: "terminal")
+            }
+
+            Button {
+              appState.copyAppDiagnostics()
+            } label: {
+              Label("Copy Diagnostics", systemImage: "doc.on.doc")
+            }
           }
+          .controlSize(.regular)
         }
-        .controlSize(.regular)
       }
 
       if showsCLIStatus {
-        cliStatus
+        VStack(spacing: 6) {
+          cliStatus
+          daemonPathStatus
+          compatibilityStatus
+        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,7 +106,7 @@ struct SessionEmptyState: View {
       return "This workspace has no open Playwright sessions right now."
     case .allOpen, nil:
       return
-        "Start a Playwright browser session with CDP enabled. The app watches ~/Library/Caches/ms-playwright/daemon for session files."
+        "Start a Playwright browser session with CDP enabled. The app observes session files without disrupting active browsers."
     }
   }
 
@@ -131,5 +152,43 @@ struct SessionEmptyState: View {
     }
     .foregroundStyle(.secondary)
     .padding(.top, 2)
+  }
+
+  private var setupCommand: some View {
+    Text(appState.setupCommandText)
+      .font(.system(.caption, design: .monospaced))
+      .foregroundStyle(.secondary)
+      .textSelection(.enabled)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 7)
+      .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+      .accessibilityIdentifier("session-empty-state-setup-command")
+  }
+
+  private var daemonPathStatus: some View {
+    Label {
+      Text("Watching \(appState.daemonDirectoryPath)")
+        .font(.caption)
+        .lineLimit(2)
+        .textSelection(.enabled)
+    } icon: {
+      Image(systemName: "folder")
+    }
+    .foregroundStyle(.secondary)
+  }
+
+  private var compatibilityStatus: some View {
+    Label {
+      Text("Sessions without a CDP port appear as non-interactive observer sessions.")
+        .font(.caption)
+    } icon: {
+      Image(systemName: "info.circle")
+    }
+    .foregroundStyle(.secondary)
+  }
+
+  private func copySetupCommand() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(appState.setupCommandText, forType: .string)
   }
 }

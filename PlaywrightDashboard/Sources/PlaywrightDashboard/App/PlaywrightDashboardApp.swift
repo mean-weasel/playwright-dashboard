@@ -32,7 +32,10 @@ struct PlaywrightDashboardApp: App {
     } else {
       state = AppState()
     }
-    state.setPersistenceDegraded(creation.usedFallback)
+    state.setPersistenceDegraded(
+      creation.usedFallback,
+      reason: creation.persistenceErrorDescription
+    )
     state.startSync(modelContext: container.mainContext)
     if let snapshotFallbackOverride = smokeArguments.snapshotFallbackOverride {
       UserDefaults.standard.set(

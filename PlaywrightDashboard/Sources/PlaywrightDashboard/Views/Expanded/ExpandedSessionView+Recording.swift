@@ -87,10 +87,33 @@ extension ExpandedSessionView {
         let count = try await recordingWriter.append(frame: frame)
         recordingFrameCount = count
       } catch {
-        self.recordingWriter = nil
-        isRecording = false
-        isFinishingRecording = false
-        recordingError = error.localizedDescription
+        if let recordingError = error as? ExpandedRecordingWriter.RecordingError,
+          recordingError.isLimitReached
+        {
+          isFinishingRecording = true
+          do {
+            let url = try await recordingWriter.finish(
+              finalURL: frame.url,
+              finalTitle: frame.title
+            )
+            lastRecordingURL = url
+            lastRecordingExportURL = nil
+            self.recordingWriter = nil
+            isRecording = false
+            isFinishingRecording = false
+            self.recordingError = "Recording stopped: \(recordingError.localizedDescription)"
+          } catch {
+            self.recordingWriter = nil
+            isRecording = false
+            isFinishingRecording = false
+            self.recordingError = error.localizedDescription
+          }
+        } else {
+          self.recordingWriter = nil
+          isRecording = false
+          isFinishingRecording = false
+          recordingError = error.localizedDescription
+        }
       }
     }
   }

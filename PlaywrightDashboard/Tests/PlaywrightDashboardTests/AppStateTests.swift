@@ -5,11 +5,11 @@ import Testing
 @testable import PlaywrightDashboard
 
 @MainActor
-@Suite("AppState")
+@Suite("AppState", .serialized)
 struct AppStateTests {
 
   @Test("startSync begins watching and publishes sessions without opening popover")
-  func startSyncPublishesSessions() throws {
+  func startSyncPublishesSessions() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(name: "smoke-session", workspace: harness.workspace("smoke-session"))
@@ -24,7 +24,9 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
 
     #expect(watchState.startCount == 1)
     #expect(appState.sessions.map(\.sessionId) == ["smoke-session"])
@@ -34,7 +36,7 @@ struct AppStateTests {
   }
 
   @Test("stopSync allows a later restart")
-  func stopSyncAllowsRestart() throws {
+  func stopSyncAllowsRestart() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(name: "first-session", workspace: harness.workspace("first-session"))
@@ -49,6 +51,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     appState.stopSync()
 
     provider.files = [
@@ -56,6 +59,7 @@ struct AppStateTests {
         name: "second-session", workspace: harness.workspace("second-session"))
     ]
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
 
     #expect(watchState.startCount == 2)
     #expect(watchState.stopCount == 1)
@@ -63,7 +67,7 @@ struct AppStateTests {
   }
 
   @Test("session commands save user changes")
-  func sessionCommandsSaveUserChanges() throws {
+  func sessionCommandsSaveUserChanges() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(
@@ -79,6 +83,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
 
     guard let first = appState.sessions.first(where: { $0.sessionId == "first-session" }),
       let second = appState.sessions.first(where: { $0.sessionId == "second-session" })
@@ -107,7 +112,7 @@ struct AppStateTests {
   }
 
   @Test("session command save failures are published and dismissible")
-  func sessionCommandSaveFailuresArePublished() throws {
+  func sessionCommandSaveFailuresArePublished() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(name: "save-fail", workspace: harness.workspace("save-fail"))
@@ -120,6 +125,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     let session = try #require(appState.sessions.first)
 
     appState.rename(session, to: "Unsaved Name")
@@ -132,7 +138,7 @@ struct AppStateTests {
   }
 
   @Test("closeStaleSessions clears a selected stale session")
-  func closeStaleSessionsClearsSelection() throws {
+  func closeStaleSessionsClearsSelection() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(name: "stale-session", workspace: harness.workspace("stale-session"))
@@ -145,6 +151,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     guard let stale = appState.sessions.first else {
       Issue.record("Expected test session")
       return
@@ -160,7 +167,7 @@ struct AppStateTests {
   }
 
   @Test("clearClosedSessions deletes closed records")
-  func clearClosedSessionsDeletesClosedRecords() throws {
+  func clearClosedSessionsDeletesClosedRecords() async throws {
     let harness = try TestSessionHarness()
     let provider = TestSessionFileProvider(files: [
       try harness.writeSession(name: "open-session", workspace: harness.workspace("open-session")),
@@ -175,6 +182,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     guard let closed = appState.sessions.first(where: { $0.sessionId == "closed-session" }) else {
       Issue.record("Expected closed-session")
       return
@@ -189,7 +197,7 @@ struct AppStateTests {
   }
 
   @Test("startSync publishes session file errors and dismisses them")
-  func startSyncPublishesSessionFileErrors() throws {
+  func startSyncPublishesSessionFileErrors() async throws {
     let harness = try TestSessionHarness()
     let malformedFile = harness.root.appendingPathComponent("broken.session")
     try "{ not-json".write(to: malformedFile, atomically: true, encoding: .utf8)
@@ -200,6 +208,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
 
     #expect(appState.sessionFileErrors.keys.contains("broken.session"))
 
@@ -227,6 +236,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     guard let session = appState.sessions.first else {
       Issue.record("Expected test session")
       return
@@ -261,6 +271,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     let closeMe = try #require(appState.sessions.first { $0.sessionId == "close-me" })
     let staleMe = try #require(appState.sessions.first { $0.sessionId == "stale-me" })
     staleMe.status = .stale
@@ -296,6 +307,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     guard let session = appState.sessions.first else {
       Issue.record("Expected test session")
       return
@@ -326,6 +338,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     let session = try #require(appState.sessions.first)
     appState.closeAndTerminate(session)
     await waitUntil { session.status == .closeFailed }
@@ -354,6 +367,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     for session in appState.sessions {
       appState.closeAndTerminate(session)
     }
@@ -386,6 +400,7 @@ struct AppStateTests {
     )
 
     appState.startSync(modelContext: harness.context)
+    await appState.performSync()
     for session in appState.sessions {
       session.status = .stale
     }
@@ -398,7 +413,7 @@ struct AppStateTests {
   }
 
   @Test("saveScreenshot writes JPEG data to the configured directory")
-  func saveScreenshotWritesFile() throws {
+  func saveScreenshotWritesFile() async throws {
     let harness = try TestSessionHarness()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -422,7 +437,7 @@ struct AppStateTests {
   }
 
   @Test("saveScreenshot records missing screenshot error")
-  func saveScreenshotMissingDataRecordsError() throws {
+  func saveScreenshotMissingDataRecordsError() async throws {
     let harness = try TestSessionHarness()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -445,7 +460,7 @@ struct AppStateTests {
   }
 
   @Test("saveScreenshot records write failure")
-  func saveScreenshotWriteFailureRecordsError() throws {
+  func saveScreenshotWriteFailureRecordsError() async throws {
     let harness = try TestSessionHarness()
     let blockedURL = harness.root.appendingPathComponent("not-a-directory")
     try "blocked".write(to: blockedURL, atomically: true, encoding: .utf8)
@@ -467,7 +482,7 @@ struct AppStateTests {
   }
 
   @Test("openCurrentURL opens HTTP URL and clears errors")
-  func openCurrentURLOpensHTTPURL() {
+  func openCurrentURLOpensHTTPURL() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -490,7 +505,7 @@ struct AppStateTests {
   }
 
   @Test("openCurrentURL rejects unsupported URL schemes")
-  func openCurrentURLRejectsUnsupportedSchemes() {
+  func openCurrentURLRejectsUnsupportedSchemes() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -512,7 +527,7 @@ struct AppStateTests {
   }
 
   @Test("openRecordingDirectory opens local file URL")
-  func openRecordingDirectoryOpensLocalFileURL() {
+  func openRecordingDirectoryOpensLocalFileURL() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -528,7 +543,7 @@ struct AppStateTests {
   }
 
   @Test("openRecordingDirectory rejects remote URLs")
-  func openRecordingDirectoryRejectsRemoteURLs() {
+  func openRecordingDirectoryRejectsRemoteURLs() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -542,7 +557,7 @@ struct AppStateTests {
   }
 
   @Test("openCDPInspector opens selected target inspector URL")
-  func openCDPInspectorOpensSelectedTargetURL() {
+  func openCDPInspectorOpensSelectedTargetURL() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -583,7 +598,7 @@ struct AppStateTests {
   }
 
   @Test("safe mode blocks CDP inspector URLs")
-  func safeModeBlocksCDPInspectorURLs() {
+  func safeModeBlocksCDPInspectorURLs() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -604,7 +619,7 @@ struct AppStateTests {
   }
 
   @Test("openCDPInspector falls back to port URL when selected target has no id")
-  func openCDPInspectorFallsBackToPortURL() {
+  func openCDPInspectorFallsBackToPortURL() async {
     let opener = URLOpenerRecorder()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -633,7 +648,7 @@ struct AppStateTests {
   }
 
   @Test("external URL opener failure records error")
-  func externalURLOpenerFailureRecordsError() {
+  func externalURLOpenerFailureRecordsError() async {
     let opener = URLOpenerRecorder(result: false)
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -657,7 +672,7 @@ struct AppStateTests {
   }
 
   @Test("refreshTargets preserves valid selected target and saves changed list")
-  func refreshTargetsPreservesValidSelection() {
+  func refreshTargetsPreservesValidSelection() async {
     let saveCounter = SaveCounter()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -690,7 +705,7 @@ struct AppStateTests {
   }
 
   @Test("refreshTargets falls back when selected target disappears")
-  func refreshTargetsFallsBackWhenSelectionDisappears() {
+  func refreshTargetsFallsBackWhenSelectionDisappears() async {
     let appState = AppState(sessionFileProvider: { [] })
     let session = SessionRecord(
       sessionId: "targets",
@@ -715,7 +730,7 @@ struct AppStateTests {
   }
 
   @Test("refreshTargets does not save unchanged list")
-  func refreshTargetsDoesNotSaveUnchangedList() {
+  func refreshTargetsDoesNotSaveUnchangedList() async {
     let saveCounter = SaveCounter()
     let appState = AppState(
       sessionFileProvider: { [] },
@@ -757,6 +772,66 @@ struct AppStateTests {
     await waitUntil { appState.playwrightCLIStatus == .available("2.0.0") }
 
     #expect(appState.playwrightCLIStatus == .available("2.0.0"))
+  }
+
+  @Test("diagnostics snapshot includes developer metadata and excludes screenshot data")
+  func diagnosticsSnapshotIncludesDeveloperMetadata() async throws {
+    let harness = try TestSessionHarness()
+    let sessionFile = try harness.writeSession(
+      name: "diag-session",
+      workspace: harness.workspace("diag-session"),
+      port: 9333
+    )
+    let appState = AppState(
+      sessionFileProvider: { [sessionFile] },
+      daemonDirectory: harness.root,
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      safeModeProvider: { true }
+    )
+    appState.setPersistenceDegraded(true, reason: "store locked")
+    appState.startSync(modelContext: harness.context)
+    await appState.performSync()
+    let session = try #require(appState.sessions.first)
+    session.lastURL = "https://example.com/private-dev-page"
+    session.lastTitle = "Private Dev Page"
+    session.lastScreenshot = Data([0x01, 0x02, 0x03])
+
+    let snapshot = appState.makeDiagnosticsSnapshot(now: Date(timeIntervalSince1970: 0))
+    let text = snapshot.text
+
+    #expect(snapshot.safeModeEnabled)
+    #expect(snapshot.persistenceDegraded)
+    #expect(snapshot.persistenceError == "store locked")
+    #expect(snapshot.daemonDirectory == harness.root.path)
+    #expect(snapshot.sessionFileCount == 1)
+    #expect(snapshot.sessionCounts["idle"] == 1)
+    #expect(text.contains("sessionId: diag-session"))
+    #expect(text.contains("cdpPort: 9333"))
+    #expect(text.contains("workspaceDir: \(harness.workspace("diag-session"))"))
+    #expect(text.contains("url: https://example.com/private-dev-page"))
+    #expect(text.contains("Excludes screenshots, cookies, page content, and recording files."))
+    #expect(!text.contains("AQID"))
+    #expect(!text.contains("0x01"))
+  }
+
+  @Test("exportAppDiagnostics writes text and publishes result")
+  func exportAppDiagnosticsWritesText() async throws {
+    let harness = try TestSessionHarness()
+    let exportURL = harness.root.appendingPathComponent("diagnostics.txt")
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      daemonDirectory: harness.root,
+      shouldStartScreenshots: false
+    )
+
+    #expect(appState.exportAppDiagnostics(to: exportURL))
+
+    let text = try String(contentsOf: exportURL, encoding: .utf8)
+    #expect(text.contains("Playwright Dashboard Diagnostics"))
+    #expect(text.contains("daemonDirectory: \(harness.root.path)"))
+    #expect(appState.lastDiagnosticsExportURL == exportURL)
+    #expect(appState.lastDiagnosticsExportError == nil)
   }
 
   @MainActor

@@ -9,18 +9,23 @@ final class AppState {
   var isPopoverOpen: Bool = false
   var isDashboardOpen: Bool = false
   var selectedSessionId: String?
-  private(set) var sessionTerminationErrors: [String: String] = [:]
-  private(set) var sessionFileErrors: [String: String] = [:]
+  var sessionTerminationErrors: [String: String] = [:]
+  var sessionFileErrors: [String: String] = [:]
   var lastSavedScreenshotURL: URL?
   var lastScreenshotSaveError: String?
   var lastOpenURLError: String?
-  private(set) var lastPersistenceSaveError: String?
+  var lastPersistenceSaveError: String?
   private(set) var playwrightCLIStatus: PlaywrightCLIStatus = .unknown
-  private(set) var isPersistenceDegraded = false
-  private let sessionFileProvider: @MainActor () -> [URL]
+  var isPersistenceDegraded = false
+  var persistenceDegradedReason: String?
+  var lastDiagnosticsExportURL: URL?
+  var lastDiagnosticsExportError: String?
+  let sessionFileProvider: @MainActor () -> [URL]
+  let daemonDirectory: URL
   private let startWatching: @MainActor () -> Void
   private let stopWatching: @MainActor () -> Void
   private let shouldStartScreenshots: Bool
+  private let shouldStartPeriodicSync: Bool
   private let syncInterval: Duration
   private let sessionTerminator: SessionTerminator
   private let cliStatusProvider: PlaywrightCLIStatusProvider
@@ -29,16 +34,18 @@ final class AppState {
   let urlOpener: @MainActor (URL) -> Bool
   private let modelContextSaver: @MainActor (ModelContext?) throws -> Void
   private var sessionManager: SessionManager?
-  private let screenshotService = ScreenshotService()
+  let screenshotService = ScreenshotService()
   private var syncTask: Task<Void, Never>?
   private var modelContext: ModelContext?
 
   init() {
     let watcher = DaemonWatcher()
     self.sessionFileProvider = { watcher.sessionFiles }
+    self.daemonDirectory = DaemonWatcher.daemonDirectory
     self.startWatching = { watcher.start() }
     self.stopWatching = { watcher.stop() }
     self.shouldStartScreenshots = true
+    self.shouldStartPeriodicSync = true
     self.syncInterval = .seconds(2)
     self.sessionTerminator = SessionTerminator()
     self.cliStatusProvider = PlaywrightCLIStatusProvider()
@@ -50,9 +57,11 @@ final class AppState {
   init(daemonDirectory: URL, shouldStartScreenshots: Bool = true) {
     let watcher = DaemonWatcher(daemonDirectory: daemonDirectory)
     self.sessionFileProvider = { watcher.sessionFiles }
+    self.daemonDirectory = daemonDirectory
     self.startWatching = { watcher.start() }
     self.stopWatching = { watcher.stop() }
     self.shouldStartScreenshots = shouldStartScreenshots
+    self.shouldStartPeriodicSync = true
     self.syncInterval = .seconds(2)
     self.sessionTerminator = SessionTerminator()
     self.cliStatusProvider = PlaywrightCLIStatusProvider()
@@ -63,9 +72,11 @@ final class AppState {
   }
   init(
     sessionFileProvider: @escaping @MainActor () -> [URL],
+    daemonDirectory: URL = DaemonWatcher.daemonDirectory,
     startWatching: @escaping @MainActor () -> Void = {},
     stopWatching: @escaping @MainActor () -> Void = {},
     shouldStartScreenshots: Bool = false,
+    shouldStartPeriodicSync: Bool = false,
     syncInterval: Duration = .seconds(2),
     sessionTerminator: SessionTerminator = SessionTerminator(),
     cliStatusProvider: PlaywrightCLIStatusProvider = PlaywrightCLIStatusProvider(),
@@ -77,9 +88,11 @@ final class AppState {
       AppState.defaultModelContextSaver
   ) {
     self.sessionFileProvider = sessionFileProvider
+    self.daemonDirectory = daemonDirectory
     self.startWatching = startWatching
     self.stopWatching = stopWatching
     self.shouldStartScreenshots = shouldStartScreenshots
+    self.shouldStartPeriodicSync = shouldStartPeriodicSync
     self.syncInterval = syncInterval
     self.sessionTerminator = sessionTerminator
     self.cliStatusProvider = cliStatusProvider
@@ -100,20 +113,24 @@ final class AppState {
 
     // Start watching the filesystem
     startWatching()
-    performSync()
     if shouldStartScreenshots {
       screenshotService.start(appState: self)
     }
 
-    // Kick off a periodic sync loop that reconciles watcher → SwiftData → sessions
-    syncTask = Task { [weak self] in
-      while !Task.isCancelled {
-        do {
+    // Kick off a periodic sync loop that reconciles watcher -> SwiftData -> sessions.
+    if shouldStartPeriodicSync {
+      Task { [weak self] in
+        await self?.performSync()
+      }
+      syncTask = Task { [weak self] in
+        while !Task.isCancelled {
+          do {
+            guard let self else { return }
+            try await Task.sleep(for: self.syncInterval)
+          } catch { break }
           guard let self else { return }
-          try await Task.sleep(for: self.syncInterval)
-        } catch { break }
-        guard let self else { return }
-        self.performSync()
+          await self.performSync()
+        }
       }
     }
   }
@@ -126,21 +143,6 @@ final class AppState {
     modelContext = nil
     screenshotService.stop()
     stopWatching()
-  }
-
-  func rename(_ session: SessionRecord, to name: String) {
-    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    session.customName = trimmed.isEmpty ? nil : trimmed
-    saveSessionChanges()
-  }
-
-  func close(_ session: SessionRecord, byUser: Bool = true) {
-    guard !isSafeMode else { return }
-    if selectedSessionId == session.sessionId {
-      selectedSessionId = nil
-    }
-    session.close(byUser: byUser)
-    saveSessionChanges()
   }
 
   func closeAndTerminate(_ session: SessionRecord) {
@@ -159,24 +161,6 @@ final class AppState {
     }
   }
 
-  func reopen(_ session: SessionRecord) {
-    session.reopen()
-    saveSessionChanges()
-  }
-
-  func closeStaleSessions() {
-    guard !isSafeMode else { return }
-    var didCloseSelectedSession = false
-    for session in sessions where session.status == .stale {
-      didCloseSelectedSession = didCloseSelectedSession || selectedSessionId == session.sessionId
-      session.close(byUser: true)
-    }
-    if didCloseSelectedSession {
-      selectedSessionId = nil
-    }
-    saveSessionChanges()
-  }
-
   func closeAndTerminateStaleSessions() {
     guard !isSafeMode else { return }
     let staleSessions = sessions.filter { $0.status == .stale }
@@ -188,44 +172,10 @@ final class AppState {
     }
   }
 
-  func dismissTerminationError(sessionId: String) {
-    sessionTerminationErrors[sessionId] = nil
-    if let session = sessions.first(where: { $0.sessionId == sessionId }),
-      session.status == .closeFailed
-    {
-      session.status = SessionRecord.deriveStatus(from: session.lastURL)
-      saveSessionChanges()
-    }
-  }
-
-  func dismissAllTerminationErrors() {
-    for session in sessions where session.status == .closeFailed {
-      session.status = SessionRecord.deriveStatus(from: session.lastURL)
-    }
-    sessionTerminationErrors.removeAll()
-    saveSessionChanges()
-  }
-
-  func dismissSessionFileError(filename: String) {
-    sessionFileErrors[filename] = nil
-  }
-
-  func dismissAllSessionFileErrors() {
-    sessionFileErrors.removeAll()
-  }
-
   func refreshPlaywrightCLIStatus() {
     Task {
       playwrightCLIStatus = await cliStatusProvider.status()
     }
-  }
-
-  func setPersistenceDegraded(_ isDegraded: Bool) {
-    isPersistenceDegraded = isDegraded
-  }
-
-  func dismissPersistenceSaveError() {
-    lastPersistenceSaveError = nil
   }
 
   func clearClosedSessions() {
@@ -241,26 +191,13 @@ final class AppState {
     saveSessionChanges()
   }
 
-  func reorder(sourceId: String, targetId: String) -> Bool {
-    guard sourceId != targetId else { return false }
-    guard let source = sessions.first(where: { $0.sessionId == sourceId }),
-      let target = sessions.first(where: { $0.sessionId == targetId })
-    else { return false }
-
-    let temp = source.gridOrder
-    source.gridOrder = target.gridOrder
-    target.gridOrder = temp
-    saveSessionChanges()
-    return true
-  }
-
   func saveSessionChanges() {
     persistSessionChanges()
   }
 
-  private func performSync() {
+  func performSync() async {
     guard let manager = sessionManager else { return }
-    manager.syncWithWatcher()
+    await manager.syncWithWatcher()
     sessions = manager.allSessions
     sessionFileErrors = manager.sessionFileErrors
   }
@@ -272,7 +209,9 @@ final class AppState {
     } catch {
       lastPersistenceSaveError = error.localizedDescription
       modelContext?.rollback()
-      performSync()
+      Task { [weak self] in
+        await self?.performSync()
+      }
     }
   }
 

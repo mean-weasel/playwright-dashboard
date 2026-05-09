@@ -7,6 +7,7 @@ private let modelContainerLogger = Logger(
 struct ModelContainerCreation {
   let container: ModelContainer
   let usedFallback: Bool
+  let persistenceErrorDescription: String?
 }
 
 enum ModelContainerFactory {
@@ -52,15 +53,24 @@ enum ModelContainerFactory {
     do {
       let container = try persistent()
       lastCreationUsedFallback = false
-      return ModelContainerCreation(container: container, usedFallback: false)
+      return ModelContainerCreation(
+        container: container,
+        usedFallback: false,
+        persistenceErrorDescription: nil
+      )
     } catch {
+      let persistenceErrorDescription = error.localizedDescription
       modelContainerLogger.error(
-        "Persistent SwiftData container failed, using in-memory store: \(error.localizedDescription)"
+        "Persistent SwiftData container failed, using in-memory store: \(persistenceErrorDescription)"
       )
       do {
         let container = try fallback()
         lastCreationUsedFallback = true
-        return ModelContainerCreation(container: container, usedFallback: true)
+        return ModelContainerCreation(
+          container: container,
+          usedFallback: true,
+          persistenceErrorDescription: persistenceErrorDescription
+        )
       } catch {
         lastCreationUsedFallback = false
         fatalError("Failed to create fallback SwiftData model container: \(error)")
