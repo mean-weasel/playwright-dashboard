@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -233,6 +233,15 @@ smoke-safe-mode-observer:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
 	scripts/smoke_safe_mode_observer.mjs
+
+smoke-playwright-cli-multi-session:
+	@if [ "$$RUN_PLAYWRIGHT_CLI_MULTI_SMOKE" != "1" ]; then \
+		echo "Set RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 to run the real Playwright CLI multi-session smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-package
+	scripts/smoke_playwright_cli_multi_session.mjs
 
 visual-snapshots:
 	$(MAKE) check-accessibility
