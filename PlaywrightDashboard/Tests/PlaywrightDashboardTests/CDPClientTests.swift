@@ -414,6 +414,21 @@ struct CDPClientTests {
     }
   }
 
+  private func expectInvalidCDPResponse(operation: () async throws -> Void) async {
+    do {
+      try await operation()
+      Issue.record("Expected invalid CDP response")
+    } catch let error as CDPClient.CDPError {
+      #expect(error.errorDescription == "Invalid screenshot response from CDP")
+    } catch {
+      Issue.record("Expected invalid CDP response, got \(error)")
+    }
+  }
+
+  private static func httpOK(body: String) -> String {
+    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+  }
+
   @Test("parseScreencastFrame returns frame for CDP screencast event")
   func parseScreencastFrameSuccess() throws {
     let jpeg = Data([0x05, 0x06, 0x07])
@@ -489,6 +504,77 @@ struct CDPClientTests {
       Issue.record("Expected listPages to reject non-2xx response")
     } catch let error as CDPClient.CDPError {
       #expect(error.errorDescription == "Invalid screenshot response from CDP")
+    }
+  }
+
+  @Test("listPages rejects invalid CDP ports")
+  func listPagesRejectsInvalidPorts() async {
+    let client = CDPClient(port: 0, requestTimeout: .seconds(2))
+    await expectInvalidCDPResponse {
+      _ = try await client.listPages()
+    }
+  }
+
+  @Test("listPages rejects non-websocket debugger URLs")
+  func listPagesRejectsNonWebSocketDebuggerURLs() async throws {
+    let body = """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"http://localhost:9222/devtools/page/page-1"}]
+      """
+    let server = try FixedHTTPServer(response: Self.httpOK(body: body))
+    try server.start()
+    defer { server.stop() }
+
+    let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
+    await expectInvalidCDPResponse {
+      _ = try await client.listPages()
+    }
+  }
+
+  @Test("listPages rejects remote debugger websocket hosts")
+  func listPagesRejectsRemoteDebuggerHosts() async throws {
+    let body = """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://example.com:9222/devtools/page/page-1"}]
+      """
+    let server = try FixedHTTPServer(response: Self.httpOK(body: body))
+    try server.start()
+    defer { server.stop() }
+
+    let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
+    await expectInvalidCDPResponse {
+      _ = try await client.listPages()
+    }
+  }
+
+  @Test("listPages accepts loopback debugger websocket hosts")
+  func listPagesAcceptsLoopbackDebuggerHosts() async throws {
+    let body = """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"wss://127.0.0.1:9222/devtools/page/page-1"}]
+      """
+    let server = try FixedHTTPServer(response: Self.httpOK(body: body))
+    try server.start()
+    defer { server.stop() }
+
+    let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
+    let pages = try await client.listPages()
+
+    #expect(pages.map(\.id) == ["page-1"])
+  }
+
+  @Test("target monitor rejects remote browser websocket hosts")
+  func targetMonitorRejectsRemoteBrowserWebSocketHosts() async throws {
+    let server = try FixedHTTPServer(
+      response: Self.httpOK(
+        body: #"{"webSocketDebuggerUrl":"ws://example.com:9222/devtools/browser/browser-1"}"#
+      )
+    )
+    try server.start()
+    defer { server.stop() }
+
+    let monitor = CDPTargetMonitor(port: server.port, requestTimeout: .seconds(2))
+    var updates = await monitor.targetUpdates().makeAsyncIterator()
+
+    await expectInvalidCDPResponse {
+      _ = try await updates.next()
     }
   }
 

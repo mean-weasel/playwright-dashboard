@@ -27,7 +27,7 @@ actor CDPClient {
 
   /// Fetches the list of pages from the CDP HTTP endpoint.
   func listPages() async throws -> [PageInfo] {
-    let url = URL(string: "http://localhost:\(port)/json/list")!
+    let url = try Self.cdpHTTPURL(port: port, path: "/json/list")
     let (data, response) = try await withTimeout(requestTimeout) {
       try await self.session.data(from: url)
     }
@@ -36,7 +36,11 @@ actor CDPClient {
     else {
       throw CDPError.invalidResponse
     }
-    return try JSONDecoder().decode([PageInfo].self, from: data)
+    let pages = try JSONDecoder().decode([PageInfo].self, from: data)
+    for webSocketDebuggerURL in pages.compactMap(\.webSocketDebuggerUrl) {
+      _ = try Self.validatedWebSocketDebuggerURL(webSocketDebuggerURL, sourceURL: url)
+    }
+    return pages
   }
 
   /// Captures a JPEG screenshot of the first available page.
@@ -46,17 +50,20 @@ actor CDPClient {
     let clampedQuality = max(0, min(100, quality))
     let pages = try await listPages()
     let pageTargets = CDPPageTargetSelection.selectableTargets(from: pages)
+    let sourceURL = try Self.cdpHTTPURL(port: port, path: "/json/list")
 
     guard
       let pageTarget = CDPPageTargetSelection.selectedTarget(
         from: pageTargets,
         preferredTargetId: targetId
-      ),
-      let wsURLString = pageTarget.webSocketDebuggerUrl,
-      let wsURL = URL(string: wsURLString)
+      )
     else {
       throw CDPError.noPages
     }
+    let wsURL = try Self.validatedWebSocketDebuggerURL(
+      pageTarget.webSocketDebuggerUrl,
+      sourceURL: sourceURL
+    )
 
     let ws = session.webSocketTask(with: wsURL)
     ws.resume()

@@ -59,6 +59,12 @@ struct SessionFileConfigTests {
     #expect(config.cdpPort == nil)
   }
 
+  @Test("Returns nil for legacy port outside valid range")
+  func malformedLegacyPortRange() {
+    let config = makeConfig(args: ["--remote-debugging-port=70000"])
+    #expect(config.cdpPort == nil)
+  }
+
   @Test("Uses direct cdpPort from current playwright-cli session files")
   func directCDPPort() throws {
     let config = try decode(
@@ -107,5 +113,53 @@ struct SessionFileConfigTests {
     )
 
     #expect(config.cdpPort == 51546)
+  }
+
+  @Test("Rejects direct cdpPort outside valid range")
+  func rejectsInvalidDirectPort() throws {
+    let json = """
+      {
+        "name": "pdsmoke",
+        "version": "1.60.0-alpha",
+        "timestamp": 1777565773957,
+        "socketPath": "/tmp/pw/session.sock",
+        "cli": {},
+        "browser": {
+          "browserName": "chromium",
+          "launchOptions": {
+            "cdpPort": 70000
+          }
+        }
+      }
+      """
+
+    #expect(throws: DecodingError.self) {
+      _ = try decode(json)
+    }
+  }
+
+  @Test("Rejects oversized string fields")
+  func rejectsOversizedStringFields() throws {
+    let oversizedName = String(
+      repeating: "a",
+      count: SessionFileConfig.maximumStringFieldLength + 1
+    )
+    let json = """
+      {
+        "name": "\(oversizedName)",
+        "version": "1.0",
+        "timestamp": 0,
+        "socketPath": "/tmp/pw/session.sock",
+        "cli": {},
+        "browser": {
+          "browserName": "chromium",
+          "launchOptions": {}
+        }
+      }
+      """
+
+    #expect(throws: DecodingError.self) {
+      _ = try decode(json)
+    }
   }
 }
