@@ -49,6 +49,21 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
+      Section("App") {
+        LabeledContent("Version") {
+          Text(appVersionText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
+
+        Button {
+          appState.openLatestRelease()
+        } label: {
+          Label("Open Latest Release", systemImage: "arrow.up.circle")
+        }
+      }
+
       Picker("Mark sessions stale after", selection: $staleThresholdSeconds) {
         ForEach(thresholdOptions, id: \.seconds) { option in
           Text(option.label).tag(option.seconds)
@@ -234,5 +249,13 @@ struct SettingsView: View {
         appState.exportAppDiagnostics(to: url)
       }
     }
+  }
+
+  private var appVersionText: String {
+    let version =
+      Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+      ?? "unknown"
+    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+    return "\(version) (\(build))"
   }
 }

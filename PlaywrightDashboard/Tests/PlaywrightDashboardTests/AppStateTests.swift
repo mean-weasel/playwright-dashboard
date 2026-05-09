@@ -556,6 +556,22 @@ struct AppStateTests {
     #expect(appState.lastOpenURLError == "Recording location is not a local file URL.")
   }
 
+  @Test("openLatestRelease opens GitHub releases page")
+  func openLatestReleaseOpensGitHubReleasesPage() async {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      urlOpener: opener.open
+    )
+
+    #expect(appState.openLatestRelease())
+    #expect(
+      opener.urls.map(\.absoluteString) == [
+        "https://github.com/neonwatty/playwright-dashboard/releases/latest"
+      ])
+    #expect(appState.lastOpenURLError == nil)
+  }
+
   @Test("openCDPInspector opens selected target inspector URL")
   func openCDPInspectorOpensSelectedTargetURL() async {
     let opener = URLOpenerRecorder()
