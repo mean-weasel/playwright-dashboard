@@ -64,6 +64,16 @@ struct MenubarPopover: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+        if !staleSessions.isEmpty {
+          HStack(spacing: 4) {
+            Circle()
+              .fill(.red)
+              .frame(width: 7, height: 7)
+            Text("\(staleSessions.count) stale")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
         if safeMode {
           SafeModeBadge(compact: true)
             .accessibilityIdentifier("menubar-safe-mode-badge")
@@ -73,7 +83,7 @@ struct MenubarPopover: View {
           Button {
             appState.closeAndTerminateStaleSessions()
           } label: {
-            Text("Clean up")
+            Text(safeMode ? "Cleanup blocked" : "Clean up")
               .font(.caption)
           }
           .buttonStyle(.plain)
@@ -102,13 +112,25 @@ struct MenubarPopover: View {
   }
 
   private var emptyState: some View {
-    VStack(spacing: 6) {
+    VStack(spacing: 8) {
       Text("No active sessions")
         .font(.subheadline)
+      Text("Start a headed playwright-cli session to begin observing.")
+        .font(.caption)
         .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+      Text(appState.playwrightCLIStatus.displayText)
+        .font(.caption2)
+        .foregroundStyle(appState.playwrightCLIStatus.isAvailable ? Color.secondary : Color.orange)
+        .lineLimit(2)
+        .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity)
+    .padding(.horizontal, 18)
     .padding(.vertical, 24)
+    .onAppear {
+      appState.refreshPlaywrightCLIStatus()
+    }
   }
 
   private var sessionList: some View {

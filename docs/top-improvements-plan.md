@@ -56,8 +56,9 @@ modifier mapping before events are sent to CDP.
 
 Status: implemented. The expanded-session GUI smoke can run in live screencast
 mode or forced snapshot-fallback mode, and CI has an optional manual workflow
-for both. Main CI has a weekly scheduled run, manual dispatch, optional GUI
-smoke jobs, artifact-only visual snapshots, coverage/app artifacts, and retained
+for the full GUI suite. Main CI has a weekly scheduled run, manual dispatch,
+required Safe-mode observer and real Playwright CLI multi-session smoke for code
+changes, artifact-only visual snapshots, coverage/app artifacts, and retained
 build/test logs. Visual snapshots produce a manifest, CI summary table, and
 non-blocking baseline status when `VISUAL_SNAPSHOT_BASELINE_DIR` is configured.
 Expanded toolbar icon controls expose explicit accessibility labels and

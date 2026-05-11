@@ -18,6 +18,7 @@ struct SessionFileScannerTests {
     #expect(result.configs.isEmpty)
     #expect(result.skippedFiles["large.session"]?.contains("file size") == true)
     #expect(result.errors["large.session"]?.contains("Skipped session file") == true)
+    #expect(result.unresolvedSessionIds == ["large"])
   }
 
   @Test("Skips files beyond the configured scan limit")
@@ -32,6 +33,7 @@ struct SessionFileScannerTests {
     #expect(result.configs.map(\.name) == ["first"])
     #expect(result.skippedFiles["second.session"]?.contains("scan limit") == true)
     #expect(result.errors["second.session"]?.contains("Skipped session file") == true)
+    #expect(result.unresolvedSessionIds == ["second"])
   }
 
   private func makeTemporaryDirectory() throws -> URL {

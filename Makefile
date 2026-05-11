@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -135,6 +135,15 @@ validate-package: package
 	codesign --verify --strict --deep $(DIST_DIR)/zipcheck/$(APP_NAME).app
 	rm -rf $(DIST_DIR)/zipcheck
 
+validate-smoke-package:
+	@if [ "$$SMOKE_REUSE_PACKAGE" = "1" ]; then \
+		test -x $(PACKAGE_BUNDLE)/Contents/MacOS/$(APP_NAME); \
+		test -f $(PACKAGE_ZIP); \
+		codesign --verify --strict --deep $(PACKAGE_BUNDLE); \
+	else \
+		$(MAKE) validate-package; \
+	fi
+
 beta-release: qa validate-package
 	@echo "Beta artifact: $(PACKAGE_ZIP)"
 
@@ -165,7 +174,7 @@ smoke-app:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	open $(PACKAGE_BUNDLE)
 	osascript scripts/smoke_app.applescript
 
@@ -196,7 +205,7 @@ smoke-expanded-interaction:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	scripts/smoke_expanded_interaction.mjs
 
 smoke-expanded-fallback:
@@ -205,7 +214,7 @@ smoke-expanded-fallback:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
 
 smoke-recording-export:
@@ -213,7 +222,7 @@ smoke-recording-export:
 		echo "Set RUN_RECORDING_EXPORT_SMOKE=1 to run the recording export smoke test"; \
 		exit 2; \
 	fi
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	scripts/smoke_recording_export.mjs
 
 smoke-multi-session:
@@ -222,7 +231,7 @@ smoke-multi-session:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	scripts/smoke_multi_session.mjs
 
 smoke-safe-mode-observer:
@@ -231,7 +240,7 @@ smoke-safe-mode-observer:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	scripts/smoke_safe_mode_observer.mjs
 
 smoke-playwright-cli-multi-session:
@@ -240,7 +249,7 @@ smoke-playwright-cli-multi-session:
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	scripts/smoke_playwright_cli_multi_session.mjs
 
 smoke-release-launch:

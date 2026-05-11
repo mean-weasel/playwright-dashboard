@@ -57,6 +57,9 @@ struct AutoLabeler {
       if abbreviations.contains(lower) {
         return lower.uppercased()
       }
+      if preservesInternalCapitalization(word) {
+        return word
+      }
       return word.prefix(1).uppercased() + word.dropFirst().lowercased()
     }
 
@@ -70,6 +73,10 @@ struct AutoLabeler {
       return title
     }
     return record.sessionId
+  }
+
+  private static func preservesInternalCapitalization(_ word: String) -> Bool {
+    word.dropFirst().contains { $0.isUppercase }
   }
 
   /// Returns true if the string is 4-8 hexadecimal characters (hash suffix pattern).

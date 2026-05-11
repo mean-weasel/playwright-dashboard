@@ -116,8 +116,14 @@ try {
     interactionEnabled: false,
     navigationEnabled: false,
   });
-  await sleep(2_000);
-  if (controlled.events.some((event) => event.path === "/next")) {
+  const safePoint = parsePointResult(await runAppleScript(waitForSafeExpandedSessionScript()));
+  const safeAttemptStartedAt = Date.now();
+  await runAppleScript(attemptDisabledNavigationScript(controlled.server.nextURL));
+  await runAppleScript(attemptDisabledCDPInspectorScript());
+  await postPointerSequence(safePoint.x, safePoint.y);
+  await runAppleScript(attemptDisabledKeyboardInputScript());
+  await sleep(1_000);
+  if (controlled.events.some((event) => event.at >= safeAttemptStartedAt && event.path === "/next")) {
     throw new Error(`${controlled.label} unexpectedly navigated while Safe mode was enabled`);
   }
   await waitFor(async () => {
@@ -125,7 +131,13 @@ try {
     return pages.some((page) => page.url === controlled.server.rootURL);
   }, `${controlled.label} remained on root URL`);
 
-  if (controlled.events.some((event) => event.type === "click" || event.type === "wheel")) {
+  if (
+    controlled.events.some(
+      (event) =>
+        event.at >= safeAttemptStartedAt &&
+        ["click", "wheel", "keydown", "input"].includes(event.type),
+    )
+  ) {
     throw new Error(`${controlled.label} unexpectedly received input while Safe mode was enabled`);
   }
   await quitApp();
@@ -430,11 +442,13 @@ function attemptDisabledNavigationScript(url) {
   return `${appleScriptHelpers()}
 set appName to "PlaywrightDashboard"
 set navField to waitForNamedElement(appName, "expanded-navigate-url-field", 80)
+assertDisabled(appName, "expanded-navigate-url-field")
 try
   set navButton to waitForNamedElement(appName, "expanded-navigate-url-button", 20)
 on error
   return "navigation-button-unavailable"
 end try
+assertDisabled(appName, "expanded-navigate-url-button")
 tell application "PlaywrightDashboard" to activate
 tell application "System Events"
   tell process appName
@@ -451,6 +465,37 @@ tell application "System Events"
   keystroke "v" using command down
   delay 0.5
   click navButton
+end tell
+`;
+}
+
+function attemptDisabledCDPInspectorScript() {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+set cdpButton to waitForNamedElement(appName, "expanded-open-cdp-inspector", 80)
+assertDisabled(appName, "expanded-open-cdp-inspector")
+tell application "PlaywrightDashboard" to activate
+tell application "System Events"
+  tell process appName
+    set frontmost to true
+    click cdpButton
+  end tell
+end tell
+`;
+}
+
+function attemptDisabledKeyboardInputScript() {
+  return `${appleScriptHelpers()}
+set appName to "PlaywrightDashboard"
+set surface to waitForNamedElement(appName, "expanded-screenshot-surface", 80)
+tell application "PlaywrightDashboard" to activate
+tell application "System Events"
+  tell process appName
+    set frontmost to true
+    click surface
+  end tell
+  delay 0.2
+  keystroke "safe-mode-should-not-forward"
 end tell
 `;
 }

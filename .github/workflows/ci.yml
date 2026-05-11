@@ -162,6 +162,63 @@ jobs:
         run: |
           swift test --enable-code-coverage
           echo "CODECOV_PATH=$(swift test --show-codecov-path)" >> "$GITHUB_ENV"
+      - name: Coverage summary
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const coveragePath = process.env.CODECOV_PATH;
+          const coverage = JSON.parse(fs.readFileSync(coveragePath, "utf8"));
+          const files = coverage.data?.flatMap((entry) => entry.files ?? []) ?? [];
+
+          function summarize(selectedFiles) {
+            const lines = selectedFiles.reduce(
+              (total, file) => {
+                total.count += file.summary?.lines?.count ?? 0;
+                total.covered += file.summary?.lines?.covered ?? 0;
+                return total;
+              },
+              { count: 0, covered: 0 },
+            );
+            const percent = lines.count === 0 ? 0 : (lines.covered / lines.count) * 100;
+            return { ...lines, percent };
+          }
+
+          const total = summarize(files);
+          const sourceFiles = files.filter((file) =>
+            file.filename.includes("/PlaywrightDashboard/Sources/"),
+          );
+          const source = summarize(sourceFiles);
+          const lowestSourceFiles = sourceFiles
+            .map((file) => ({
+              filename: file.filename.split("/PlaywrightDashboard/Sources/").at(-1),
+              percent: file.summary?.lines?.percent ?? 0,
+              count: file.summary?.lines?.count ?? 0,
+              covered: file.summary?.lines?.covered ?? 0,
+            }))
+            .filter((file) => file.count > 0)
+            .sort((a, b) => a.percent - b.percent)
+            .slice(0, 10);
+
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Coverage",
+              "",
+              `Total lines: ${total.covered}/${total.count} (${total.percent.toFixed(2)}%)`,
+              `Source lines: ${source.covered}/${source.count} (${source.percent.toFixed(2)}%)`,
+              "",
+              "### Lowest Source Files",
+              "",
+              "| File | Lines | Coverage |",
+              "| --- | ---: | ---: |",
+              ...lowestSourceFiles.map(
+                (file) =>
+                  `| ${file.filename} | ${file.covered}/${file.count} | ${file.percent.toFixed(2)}% |`,
+              ),
+              "",
+            ].join("\n"),
+          );
+          NODE
       - name: Upload coverage JSON
         uses: actions/upload-artifact@v6
         with:
@@ -425,9 +482,10 @@ jobs:
       always() && !cancelled() &&
       needs.package-check.result == 'success' &&
       (github.event_name == 'pull_request' ||
+       github.event_name == 'push' ||
+       github.event_name == 'merge_group' ||
        github.event_name == 'schedule' ||
-       (github.event_name == 'workflow_dispatch' &&
-        (inputs.gui_smoke_mode == 'safe-observer' || inputs.gui_smoke_mode == 'all')))
+       github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v5
       - name: Select Xcode
@@ -462,9 +520,10 @@ jobs:
       always() && !cancelled() &&
       needs.package-check.result == 'success' &&
       (github.event_name == 'pull_request' ||
+       github.event_name == 'push' ||
+       github.event_name == 'merge_group' ||
        github.event_name == 'schedule' ||
-       (github.event_name == 'workflow_dispatch' &&
-        (inputs.gui_smoke_mode == 'cli-multi' || inputs.gui_smoke_mode == 'all')))
+       github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v5
       - name: Select Xcode
@@ -542,6 +601,7 @@ jobs:
     timeout-minutes: 5
     if: always()
     needs:
+      - detect-changes
       - lint
       - build
       - unit-tests
@@ -565,12 +625,23 @@ jobs:
           STRUCTURE_RESULT: ${{ needs.visual-structure-smoke.result }}
           SAFE_OBSERVER_RESULT: ${{ needs.gui-smoke-safe-mode-observer.result }}
           CLI_MULTI_RESULT: ${{ needs.gui-smoke-playwright-cli-multi-session.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          CODE_CHANGED: ${{ needs.detect-changes.outputs.code }}
         run: |
           echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Coverage: $COVERAGE_RESULT, Size: $SIZE_RESULT, Mockups: $MOCKUP_RESULT, Package: $PACKAGE_RESULT, Structure: $STRUCTURE_RESULT, Safe observer: $SAFE_OBSERVER_RESULT, CLI multi: $CLI_MULTI_RESULT"
+          allow_skipped=false
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$CODE_CHANGED" != "true" ]; then
+            allow_skipped=true
+            echo "Docs-only PR detected; skipped required jobs are allowed."
+          fi
           for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$COVERAGE_RESULT" "$SIZE_RESULT" "$MOCKUP_RESULT" "$PACKAGE_RESULT" "$STRUCTURE_RESULT" "$SAFE_OBSERVER_RESULT" "$CLI_MULTI_RESULT"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               echo "A required job reported: $result"
               exit 1
             fi
+            if [ "$result" = "skipped" ] && [ "$allow_skipped" != "true" ]; then
+              echo "A required job was unexpectedly skipped"
+              exit 1
+            fi
           done
-          echo "All required jobs passed or were skipped"
+          echo "All required jobs passed"

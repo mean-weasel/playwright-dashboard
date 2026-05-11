@@ -229,7 +229,7 @@ struct SessionInfoBar: View {
       Button("Keep Safe Mode", role: .cancel) {}
     } message: {
       Text(
-        "Control mode disables Safe read-only mode and allows navigation, CDP inspector access, clicks, scrolling, and keyboard input to reach the browser."
+        "Control mode allows navigation, CDP inspector access, clicks, scrolling, and keyboard input to reach this browser session."
       )
     }
   }

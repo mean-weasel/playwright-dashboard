@@ -2,14 +2,14 @@ import Foundation
 
 extension ExpandedSessionView {
   var smokeCommandSignature: String {
-    "\(session.sessionId):\(safeMode):\(interactionEnabled)"
+    "\(session.sessionId):\(sessionSafeModeEnabled):\(interactionEnabled)"
   }
 
   var expandedReadinessSignature: String {
     [
       session.sessionId,
       session.lastURL ?? "",
-      String(safeMode),
+      String(sessionSafeModeEnabled),
       String(effectiveInteractionEnabled),
       String(describing: frameMode),
       String(describing: targetMonitorMode),
@@ -21,7 +21,7 @@ extension ExpandedSessionView {
   func reportSmokeExpandedReadiness() {
     SmokeReadinessReporter.writeExpanded(
       session: session,
-      safeMode: safeMode,
+      safeMode: sessionSafeModeEnabled,
       interactionEnabled: effectiveInteractionEnabled,
       frameMode: frameMode,
       targetMonitorMode: targetMonitorMode,

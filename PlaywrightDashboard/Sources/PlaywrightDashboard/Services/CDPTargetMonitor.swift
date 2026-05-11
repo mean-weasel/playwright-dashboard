@@ -15,7 +15,7 @@ actor CDPTargetMonitor {
   }
 
   func targetUpdates() -> AsyncThrowingStream<[CDPPageTarget], Error> {
-    AsyncThrowingStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+    AsyncThrowingStream { continuation in
       let task = Task {
         do {
           try await self.runTargetDiscovery(continuation: continuation)

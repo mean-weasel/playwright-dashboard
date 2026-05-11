@@ -193,6 +193,54 @@ struct SessionManagerTests {
     #expect(manager.sessionFileErrors.keys.contains("broken.session"))
   }
 
+  @Test("Malformed existing session file does not close the session")
+  func malformedExistingSessionFileDoesNotCloseSession() async throws {
+    let harness = try TestSessionHarness()
+    let file = try harness.writeSession(
+      name: "partial", workspace: harness.workspace("partial"), port: 9222)
+    let provider = TestSessionFileProvider(files: [file])
+    let manager = SessionManager(
+      sessionFileProvider: { provider.files },
+      modelContext: harness.context
+    )
+
+    await manager.syncWithWatcher()
+    try "{ partial-json".write(to: file, atomically: true, encoding: .utf8)
+    await manager.syncWithWatcher()
+
+    #expect(manager.allSessions.map(\.sessionId) == ["partial"])
+    #expect(manager.allSessions[0].status == .idle)
+    #expect(manager.sessionFileErrors.keys.contains("partial.session"))
+  }
+
+  @Test("Files skipped by scan cap do not close existing sessions")
+  func scanCapSkippedFilesDoNotCloseExistingSessions() async throws {
+    let harness = try TestSessionHarness()
+    let first = try harness.writeSession(
+      name: "first", workspace: harness.workspace("first"), port: 9222)
+    let second = try harness.writeSession(
+      name: "second", workspace: harness.workspace("second"), port: 9333)
+    let provider = TestSessionFileProvider(files: [first, second])
+    let manager = SessionManager(
+      sessionFileProvider: { provider.files },
+      modelContext: harness.context,
+      sessionFileScanner: SessionFileScanner(maxFilesPerScan: 2)
+    )
+
+    await manager.syncWithWatcher()
+    let cappedManager = SessionManager(
+      sessionFileProvider: { provider.files },
+      modelContext: harness.context,
+      sessionFileScanner: SessionFileScanner(maxFilesPerScan: 1)
+    )
+
+    await cappedManager.syncWithWatcher()
+
+    #expect(cappedManager.allSessions.map(\.sessionId) == ["first", "second"])
+    #expect(cappedManager.allSessions.first { $0.sessionId == "second" }?.status == .idle)
+    #expect(cappedManager.sessionFileErrors.keys.contains("second.session"))
+  }
+
   @Test("Clears session file errors after file parses successfully")
   func clearsSessionFileErrorsAfterSuccessfulParse() async throws {
     let harness = try TestSessionHarness()

@@ -545,19 +545,56 @@ struct CDPClientTests {
     }
   }
 
+  @Test("listPages rejects debugger websocket hosts that only look like loopback")
+  func listPagesRejectsLoopbackPrefixHostnames() async throws {
+    let bodies = [
+      """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://127.attacker.example:9222/devtools/page/page-1"}]
+      """,
+      """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://localhost.example.com:9222/devtools/page/page-1"}]
+      """,
+      """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://127.0.0.1.example.com:9222/devtools/page/page-1"}]
+      """,
+    ]
+
+    for body in bodies {
+      let server = try FixedHTTPServer(response: Self.httpOK(body: body))
+      try server.start()
+      defer { server.stop() }
+
+      let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
+      await expectInvalidCDPResponse {
+        _ = try await client.listPages()
+      }
+    }
+  }
+
   @Test("listPages accepts loopback debugger websocket hosts")
   func listPagesAcceptsLoopbackDebuggerHosts() async throws {
-    let body = """
-      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"wss://127.0.0.1:9222/devtools/page/page-1"}]
+    let bodies = [
       """
-    let server = try FixedHTTPServer(response: Self.httpOK(body: body))
-    try server.start()
-    defer { server.stop() }
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"wss://127.0.0.1:9222/devtools/page/page-1"}]
+      """,
+      """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://127.255.255.255:9222/devtools/page/page-1"}]
+      """,
+      """
+      [{"id":"page-1","type":"page","url":"http://localhost:3000","title":"Fake App","webSocketDebuggerUrl":"ws://[::1]:9222/devtools/page/page-1"}]
+      """,
+    ]
 
-    let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
-    let pages = try await client.listPages()
+    for body in bodies {
+      let server = try FixedHTTPServer(response: Self.httpOK(body: body))
+      try server.start()
+      defer { server.stop() }
 
-    #expect(pages.map(\.id) == ["page-1"])
+      let client = CDPClient(port: server.port, requestTimeout: .seconds(2))
+      let pages = try await client.listPages()
+
+      #expect(pages.map(\.id) == ["page-1"])
+    }
   }
 
   @Test("target monitor rejects remote browser websocket hosts")
