@@ -147,9 +147,10 @@ or mockup HTML files run the full code path.
 
 Pull request, push, merge queue, scheduled, and manual CI run the Safe-mode
 observer smoke and real Playwright CLI multi-session smoke when code paths
-change. Scheduled and manually dispatched CI can also run optional expanded-view
-GUI smoke jobs and visual snapshots. The separate `GUI Smoke` workflow can
-manually run the full GUI smoke suite and upload artifacts.
+change. Scheduled CI also runs the exploratory expanded-view GUI smoke jobs, but
+those jobs are non-blocking because macOS runner input delivery can be flaky;
+manual dispatch keeps those optional smoke jobs strict. The separate `GUI Smoke`
+workflow can manually run the full GUI smoke suite and upload artifacts.
 
 ## Local PR Checklist
 
