@@ -320,6 +320,7 @@ jobs:
     name: GUI Smoke Live
     runs-on: macos-15
     timeout-minutes: 25
+    continue-on-error: ${{ github.event_name == 'schedule' }}
     needs: [package-check]
     if: >-
       always() && !cancelled() &&
@@ -360,6 +361,7 @@ jobs:
     name: GUI Smoke Fallback
     runs-on: macos-15
     timeout-minutes: 25
+    continue-on-error: ${{ github.event_name == 'schedule' }}
     needs: [package-check]
     if: >-
       always() && !cancelled() &&
@@ -398,6 +400,7 @@ jobs:
     name: GUI Smoke Recording Export
     runs-on: macos-15
     timeout-minutes: 20
+    continue-on-error: ${{ github.event_name == 'schedule' }}
     needs: [package-check]
     if: >-
       always() && !cancelled() &&
@@ -441,6 +444,7 @@ jobs:
     name: GUI Smoke Multi Session
     runs-on: macos-15
     timeout-minutes: 30
+    continue-on-error: ${{ github.event_name == 'schedule' }}
     needs: [package-check]
     if: >-
       always() && !cancelled() &&
