@@ -112,6 +112,24 @@ RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```
 
+To mirror the required CI surface locally with one target, use `make smoke-all`:
+
+```sh
+make smoke-all
+```
+
+`smoke-all` runs `make check-accessibility` once, then `qa`, `validate-package`,
+`visual-structure-smoke`, `smoke-safe-mode-observer`, and
+`smoke-playwright-cli-multi-session`. It propagates `SKIP_ACCESSIBILITY_CHECK=1`,
+`SMOKE_REUSE_PACKAGE=1`, and `RUN_ALL_SMOKES=1` to the sub-makes so the
+accessibility probe and package build only happen once and the per-smoke env
+gates are satisfied without enumerating them. `RUN_ALL_SMOKES=1` is also
+accepted as an alternative to the individual `RUN_*_SMOKE=1` flag on every
+gated smoke target. Use `make smoke-all-extended` to also run the exploratory
+expanded-session, fallback, recording, and multi-session smokes. Use
+`SMOKE_ALL_DRY_RUN=1 make smoke-all` (or `smoke-all-extended`) to print the
+planned steps without running them.
+
 GUI smoke and visual snapshot tests require Accessibility permission for the
 terminal/editor, Node.js, `/usr/bin/osascript`, and any wrapper process. They
 also require Chrome, using `CHROME_PATH` when it is not installed at the default

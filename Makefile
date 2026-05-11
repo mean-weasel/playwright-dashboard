@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -166,6 +166,10 @@ notarized-release: qa staple-package
 	@echo "Notarized artifact: $(PACKAGE_ZIP)"
 
 check-accessibility:
+	@if [ "$$SKIP_ACCESSIBILITY_CHECK" = "1" ]; then \
+		echo "Skipping accessibility check (SKIP_ACCESSIBILITY_CHECK=1)"; \
+		exit 0; \
+	fi; \
 	scripts/check_accessibility.mjs
 
 smoke-app:
@@ -200,8 +204,8 @@ smoke-live-cdp:
 		swift test --filter CDPClientLiveSmokeTests
 
 smoke-expanded-interaction:
-	@if [ "$$RUN_EXPANDED_INTERACTION_SMOKE" != "1" ]; then \
-		echo "Set RUN_EXPANDED_INTERACTION_SMOKE=1 to drive the expanded-session interaction smoke test"; \
+	@if [ "$$RUN_EXPANDED_INTERACTION_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_EXPANDED_INTERACTION_SMOKE=1 (or RUN_ALL_SMOKES=1) to drive the expanded-session interaction smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
@@ -209,8 +213,8 @@ smoke-expanded-interaction:
 	scripts/smoke_expanded_interaction.mjs
 
 smoke-expanded-fallback:
-	@if [ "$$RUN_EXPANDED_FALLBACK_SMOKE" != "1" ]; then \
-		echo "Set RUN_EXPANDED_FALLBACK_SMOKE=1 to drive the expanded-session fallback smoke test"; \
+	@if [ "$$RUN_EXPANDED_FALLBACK_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_EXPANDED_FALLBACK_SMOKE=1 (or RUN_ALL_SMOKES=1) to drive the expanded-session fallback smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
@@ -218,16 +222,16 @@ smoke-expanded-fallback:
 	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
 
 smoke-recording-export:
-	@if [ "$$RUN_RECORDING_EXPORT_SMOKE" != "1" ]; then \
-		echo "Set RUN_RECORDING_EXPORT_SMOKE=1 to run the recording export smoke test"; \
+	@if [ "$$RUN_RECORDING_EXPORT_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_RECORDING_EXPORT_SMOKE=1 (or RUN_ALL_SMOKES=1) to run the recording export smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) validate-smoke-package
 	scripts/smoke_recording_export.mjs
 
 smoke-multi-session:
-	@if [ "$$RUN_MULTI_SESSION_SMOKE" != "1" ]; then \
-		echo "Set RUN_MULTI_SESSION_SMOKE=1 to run the multi-session GUI smoke test"; \
+	@if [ "$$RUN_MULTI_SESSION_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_MULTI_SESSION_SMOKE=1 (or RUN_ALL_SMOKES=1) to run the multi-session GUI smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
@@ -235,8 +239,8 @@ smoke-multi-session:
 	scripts/smoke_multi_session.mjs
 
 smoke-safe-mode-observer:
-	@if [ "$$RUN_SAFE_MODE_OBSERVER_SMOKE" != "1" ]; then \
-		echo "Set RUN_SAFE_MODE_OBSERVER_SMOKE=1 to run the Safe-mode observer GUI smoke test"; \
+	@if [ "$$RUN_SAFE_MODE_OBSERVER_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_SAFE_MODE_OBSERVER_SMOKE=1 (or RUN_ALL_SMOKES=1) to run the Safe-mode observer GUI smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
@@ -244,8 +248,8 @@ smoke-safe-mode-observer:
 	scripts/smoke_safe_mode_observer.mjs
 
 smoke-playwright-cli-multi-session:
-	@if [ "$$RUN_PLAYWRIGHT_CLI_MULTI_SMOKE" != "1" ]; then \
-		echo "Set RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 to run the real Playwright CLI multi-session smoke test"; \
+	@if [ "$$RUN_PLAYWRIGHT_CLI_MULTI_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 (or RUN_ALL_SMOKES=1) to run the real Playwright CLI multi-session smoke test"; \
 		exit 2; \
 	fi
 	$(MAKE) check-accessibility
@@ -259,6 +263,44 @@ smoke-release-launch:
 	fi
 	scripts/smoke_release_launch.mjs "$${RELEASE_APP_PATH:-$(PACKAGE_BUNDLE)}"
 
+smoke-all:
+	@set -e; \
+	if [ "$$SMOKE_ALL_DRY_RUN" = "1" ]; then \
+		echo "smoke-all would run:"; \
+		echo "  1. make check-accessibility (skip with SKIP_ACCESSIBILITY_CHECK=1)"; \
+		echo "  2. make qa"; \
+		echo "  3. make validate-package"; \
+		echo "  4. make visual-structure-smoke (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1)"; \
+		echo "  5. make smoke-safe-mode-observer (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1)"; \
+		echo "  6. make smoke-playwright-cli-multi-session (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1)"; \
+		exit 0; \
+	fi; \
+	$(MAKE) check-accessibility; \
+	$(MAKE) qa; \
+	$(MAKE) validate-package; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 visual-structure-smoke; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-safe-mode-observer; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-playwright-cli-multi-session; \
+	echo "smoke-all: OK"
+
+smoke-all-extended:
+	@set -e; \
+	if [ "$$SMOKE_ALL_DRY_RUN" = "1" ]; then \
+		echo "smoke-all-extended would run smoke-all plus:"; \
+		echo "  - make smoke-expanded-interaction"; \
+		echo "  - make smoke-expanded-fallback"; \
+		echo "  - make smoke-recording-export"; \
+		echo "  - make smoke-multi-session"; \
+		$(MAKE) SMOKE_ALL_DRY_RUN=1 smoke-all; \
+		exit 0; \
+	fi; \
+	$(MAKE) smoke-all; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-expanded-interaction; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-expanded-fallback; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-recording-export; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-multi-session; \
+	echo "smoke-all-extended: OK"
+
 visual-snapshots:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-package
@@ -266,7 +308,7 @@ visual-snapshots:
 
 visual-structure-smoke:
 	$(MAKE) check-accessibility
-	$(MAKE) validate-package
+	$(MAKE) validate-smoke-package
 	VISUAL_SNAPSHOT_STRUCTURE_ONLY=1 \
 		VISUAL_SNAPSHOT_CASES=empty-dashboard,populated-dashboard,safe-mode-dashboard,settings,closed-history \
 		VISUAL_SNAPSHOT_DIR=$(DIST_DIR)/visual-structure-smoke \
