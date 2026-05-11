@@ -210,7 +210,7 @@ smoke-expanded-interaction:
 	fi
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
-	scripts/smoke_expanded_interaction.mjs
+	scripts/run_smoke_with_retry.mjs --name expanded-interaction -- scripts/smoke_expanded_interaction.mjs
 
 smoke-expanded-fallback:
 	@if [ "$$RUN_EXPANDED_FALLBACK_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
@@ -219,7 +219,7 @@ smoke-expanded-fallback:
 	fi
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
-	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/smoke_expanded_interaction.mjs
+	SMOKE_FORCE_SNAPSHOT_FALLBACK=1 scripts/run_smoke_with_retry.mjs --name expanded-fallback -- scripts/smoke_expanded_interaction.mjs
 
 smoke-recording-export:
 	@if [ "$$RUN_RECORDING_EXPORT_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
@@ -227,7 +227,7 @@ smoke-recording-export:
 		exit 2; \
 	fi
 	$(MAKE) validate-smoke-package
-	scripts/smoke_recording_export.mjs
+	scripts/run_smoke_with_retry.mjs --name recording-export -- scripts/smoke_recording_export.mjs
 
 smoke-multi-session:
 	@if [ "$$RUN_MULTI_SESSION_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
@@ -236,7 +236,7 @@ smoke-multi-session:
 	fi
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
-	scripts/smoke_multi_session.mjs
+	scripts/run_smoke_with_retry.mjs --name multi-session -- scripts/smoke_multi_session.mjs
 
 smoke-safe-mode-observer:
 	@if [ "$$RUN_SAFE_MODE_OBSERVER_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
@@ -245,7 +245,7 @@ smoke-safe-mode-observer:
 	fi
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
-	scripts/smoke_safe_mode_observer.mjs
+	scripts/run_smoke_with_retry.mjs --name safe-mode-observer -- scripts/smoke_safe_mode_observer.mjs
 
 smoke-playwright-cli-multi-session:
 	@if [ "$$RUN_PLAYWRIGHT_CLI_MULTI_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
@@ -254,7 +254,7 @@ smoke-playwright-cli-multi-session:
 	fi
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
-	scripts/smoke_playwright_cli_multi_session.mjs
+	scripts/run_smoke_with_retry.mjs --name playwright-cli-multi-session -- scripts/smoke_playwright_cli_multi_session.mjs
 
 smoke-release-launch:
 	@if [ "$$RUN_RELEASE_LAUNCH_SMOKE" != "1" ]; then \
