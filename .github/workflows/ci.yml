@@ -617,6 +617,7 @@ jobs:
       - gui-smoke-safe-mode-observer
       - gui-smoke-playwright-cli-multi-session
     steps:
+      - uses: actions/checkout@v5
       - name: Check required jobs
         env:
           LINT_RESULT: ${{ needs.lint.result }}
@@ -649,3 +650,15 @@ jobs:
             fi
           done
           echo "All required jobs passed"
+      - name: smoke-all parity preview (non-blocking)
+        continue-on-error: true
+        run: |
+          {
+            echo "## smoke-all Parity"
+            echo ""
+            echo "Surface invoked by \`make smoke-all\` (compare against the required-job set above):"
+            echo ""
+            echo '```'
+            SMOKE_ALL_DRY_RUN=1 make smoke-all
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

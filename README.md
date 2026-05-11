@@ -194,6 +194,21 @@ RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
 RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 ```
 
+To run the same surface CI requires on every PR with a single target:
+
+```sh
+make smoke-all
+```
+
+`make smoke-all` runs `make check-accessibility` once, then `qa`,
+`validate-package`, `visual-structure-smoke`, `smoke-safe-mode-observer`, and
+`smoke-playwright-cli-multi-session`. Setting `RUN_ALL_SMOKES=1` on any
+individual smoke target satisfies its per-target opt-in env gate, so the
+aggregator does not need to enumerate the individual `RUN_*_SMOKE=1` flags.
+`make smoke-all-extended` adds the exploratory expanded-session, fallback,
+recording, and multi-session smokes. Preview the planned steps without running
+them with `SMOKE_ALL_DRY_RUN=1 make smoke-all`.
+
 To keep failure artifacts:
 
 ```sh
