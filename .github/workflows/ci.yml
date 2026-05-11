@@ -346,6 +346,7 @@ jobs:
           SMOKE_ENFORCE_SURFACE_PIXELS: "1"
           SMOKE_ENFORCE_INPUT_EVENTS: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-live-artifacts
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-expanded-interaction
       - name: Upload live smoke artifacts
         if: always()
@@ -355,6 +356,13 @@ jobs:
           path: |
             dist/gui-smoke-live-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload live smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-live
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   gui-smoke-fallback:
@@ -385,6 +393,7 @@ jobs:
         env:
           RUN_EXPANDED_FALLBACK_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-fallback-artifacts
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-expanded-fallback
       - name: Upload fallback smoke artifacts
         if: always()
@@ -394,6 +403,13 @@ jobs:
           path: |
             dist/gui-smoke-fallback-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload fallback smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-fallback
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   gui-smoke-recording:
@@ -421,6 +437,7 @@ jobs:
       - name: Run recording export smoke
         env:
           RUN_RECORDING_EXPORT_SMOKE: "1"
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-recording-export
       - name: Collect recording export artifacts
         if: always()
@@ -438,6 +455,13 @@ jobs:
           path: |
             dist/gui-smoke-recording-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload recording smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-recording
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   gui-smoke-multi-session:
@@ -466,6 +490,7 @@ jobs:
         env:
           RUN_MULTI_SESSION_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-multi-session-artifacts
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-multi-session
       - name: Upload multi-session smoke artifacts
         if: always()
@@ -475,6 +500,13 @@ jobs:
           path: |
             dist/gui-smoke-multi-session-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload multi-session smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-multi-session
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   gui-smoke-safe-mode-observer:
@@ -504,6 +536,7 @@ jobs:
         env:
           RUN_SAFE_MODE_OBSERVER_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-safe-mode-observer-artifacts
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-safe-mode-observer
       - name: Upload Safe-mode observer smoke artifacts
         if: always()
@@ -513,6 +546,13 @@ jobs:
           path: |
             dist/gui-smoke-safe-mode-observer-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload Safe-mode observer smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-safe-mode-observer
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   gui-smoke-playwright-cli-multi-session:
@@ -550,6 +590,7 @@ jobs:
         env:
           RUN_PLAYWRIGHT_CLI_MULTI_SMOKE: "1"
           SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-playwright-cli-multi-session-artifacts
+          SMOKE_RETRY_COUNT: "1"
         run: make smoke-playwright-cli-multi-session
       - name: Upload Playwright CLI multi-session smoke artifacts
         if: always()
@@ -559,6 +600,13 @@ jobs:
           path: |
             dist/gui-smoke-playwright-cli-multi-session-artifacts/**
             dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload Playwright CLI multi-session smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-playwright-cli-multi-session
+          path: dist/smoke-results.json
           if-no-files-found: ignore
 
   visual-snapshots:
@@ -662,3 +710,14 @@ jobs:
             SMOKE_ALL_DRY_RUN=1 make smoke-all
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Download smoke results
+        if: always()
+        uses: actions/download-artifact@v6
+        with:
+          path: smoke-results
+          pattern: smoke-results-*
+          merge-multiple: false
+      - name: Smoke flake + retry summary
+        if: always()
+        continue-on-error: true
+        run: node scripts/summarize_smoke_results.mjs smoke-results

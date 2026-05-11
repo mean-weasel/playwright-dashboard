@@ -140,6 +140,30 @@ real `playwright-cli` session discovery path. The recording export smoke
 launches the packaged app and Chrome/CDP, but avoids AppleScript UI traversal by
 using the app's smoke-only recording runner.
 
+### Smoke Retry Policy
+
+Each Chrome-driven GUI smoke target (`smoke-expanded-interaction`,
+`smoke-expanded-fallback`, `smoke-recording-export`, `smoke-multi-session`,
+`smoke-safe-mode-observer`, `smoke-playwright-cli-multi-session`) is invoked
+through `scripts/run_smoke_with_retry.mjs`. Set `SMOKE_RETRY_COUNT=N` to allow
+up to `N` retries on top of the initial attempt. The wrapper records each run
+in `dist/smoke-results.json` and, between attempts, kills any running
+`PlaywrightDashboard` process before re-running so the smoke script's own
+preflight starts from a clean slate.
+
+Defaults:
+
+- **Locally:** `SMOKE_RETRY_COUNT` is unset (0), so smokes run once and fail on
+  the first hiccup. Run with `SMOKE_RETRY_COUNT=1 make smoke-...` when
+  investigating an intermittent failure.
+- **CI:** the workflow sets `SMOKE_RETRY_COUNT=1`, so a single transient
+  failure does not fail the gate. Records and the retry flag are uploaded as
+  `smoke-results-<job>` artifacts and aggregated by the `CI Gate` job into a
+  **Smoke Flake Summary** in the run summary.
+
+To disable retries in CI while keeping the rest of the policy, set
+`SMOKE_RETRY_COUNT=0` in the relevant job env.
+
 Visual snapshots are artifact-only. Baseline comparison is intentionally
 non-blocking:
 
