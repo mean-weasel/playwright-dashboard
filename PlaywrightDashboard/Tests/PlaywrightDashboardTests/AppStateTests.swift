@@ -217,6 +217,38 @@ struct AppStateTests {
     #expect(appState.sessionFileErrors.isEmpty)
   }
 
+  @Test("startSync publishes and clears automatic sync save failures")
+  func startSyncPublishesAutomaticSyncSaveFailures() async throws {
+    let harness = try TestSessionHarness()
+    let provider = TestSessionFileProvider(files: [
+      try harness.writeSession(
+        name: "sync-save-fail", workspace: harness.workspace("sync-save-fail"))
+    ])
+    let saveFailure = SaveFailureSwitch()
+    let appState = AppState(
+      sessionFileProvider: { provider.files },
+      shouldStartScreenshots: false,
+      syncInterval: .seconds(60),
+      sessionSyncModelContextSaver: { context in
+        if saveFailure.shouldFail {
+          throw TestError.saveFailed
+        }
+        try context.save()
+      }
+    )
+
+    appState.startSync(modelContext: harness.context)
+    await appState.performSync()
+
+    #expect(appState.lastPersistenceSaveError == "saveFailed")
+    #expect(appState.diagnosticsText().contains("lastPersistenceSaveError: saveFailed"))
+
+    saveFailure.shouldFail = false
+    await appState.performSync()
+
+    #expect(appState.lastPersistenceSaveError == nil)
+  }
+
   @Test("closeAndTerminate archives locally and invokes terminator")
   func closeAndTerminateInvokesTerminator() async throws {
     let harness = try TestSessionHarness()
@@ -436,6 +468,32 @@ struct AppStateTests {
     #expect(appState.lastScreenshotSaveError == nil)
   }
 
+  @Test("saveScreenshot sanitizes session id path components")
+  func saveScreenshotSanitizesSessionIdPathComponents() async throws {
+    let harness = try TestSessionHarness()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      screenshotDirectoryProvider: { harness.root }
+    )
+    let session = SessionRecord(
+      sessionId: "../admin/session:one",
+      autoLabel: "Shot",
+      workspaceDir: harness.workspace("shot"),
+      cdpPort: 9222,
+      socketPath: "/tmp/shot.sock",
+      lastScreenshot: Data([0x01, 0x02, 0x03])
+    )
+
+    let savedURL = try #require(appState.saveScreenshot(session))
+
+    #expect(savedURL.deletingLastPathComponent() == harness.root)
+    #expect(savedURL.lastPathComponent.hasPrefix("---admin-session-one-"))
+    #expect(!savedURL.lastPathComponent.contains("/"))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: harness.root.deletingLastPathComponent().appendingPathComponent("admin").path))
+  }
+
   @Test("saveScreenshot records missing screenshot error")
   func saveScreenshotMissingDataRecordsError() async throws {
     let harness = try TestSessionHarness()
@@ -632,6 +690,39 @@ struct AppStateTests {
     #expect(appState.openCDPInspector(session) == false)
     #expect(opener.urls.isEmpty)
     #expect(appState.lastOpenURLError == "Safe mode is enabled. CDP inspector access is disabled.")
+  }
+
+  @Test("browser control authorization is per session and does not disable global safe mode")
+  func browserControlAuthorizationIsPerSession() async {
+    let opener = URLOpenerRecorder()
+    let appState = AppState(
+      sessionFileProvider: { [] },
+      safeModeProvider: { true },
+      urlOpener: opener.open
+    )
+    let authorized = SessionRecord(
+      sessionId: "authorized",
+      autoLabel: "Authorized",
+      workspaceDir: "/tmp/authorized",
+      cdpPort: 9333,
+      socketPath: "/tmp/authorized.sock"
+    )
+    let blocked = SessionRecord(
+      sessionId: "blocked",
+      autoLabel: "Blocked",
+      workspaceDir: "/tmp/blocked",
+      cdpPort: 9444,
+      socketPath: "/tmp/blocked.sock"
+    )
+
+    appState.authorizeBrowserControl(for: authorized)
+
+    #expect(appState.isSafeMode)
+    #expect(appState.isBrowserControlAuthorized(for: authorized))
+    #expect(appState.isBrowserControlAuthorized(for: blocked) == false)
+    #expect(appState.openCDPInspector(authorized))
+    #expect(appState.openCDPInspector(blocked) == false)
+    #expect(opener.urls.map(\.absoluteString) == ["http://localhost:9333"])
   }
 
   @Test("openCDPInspector falls back to port URL when selected target has no id")
@@ -932,6 +1023,10 @@ struct AppStateTests {
       urls.append(url)
       return result
     }
+  }
+
+  private final class SaveFailureSwitch {
+    var shouldFail = true
   }
 
   private enum TestError: LocalizedError {

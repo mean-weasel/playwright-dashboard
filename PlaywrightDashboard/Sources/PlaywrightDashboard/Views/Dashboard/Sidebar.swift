@@ -178,8 +178,11 @@ struct Sidebar: View {
           Button {
             showCleanupConfirmation = true
           } label: {
-            Label("Clean Up \(staleCount) Stale", systemImage: "trash")
-              .foregroundStyle(.orange)
+            Label(
+              safeMode ? "Cleanup Blocked by Safe Mode" : "Clean Up \(staleCount) Stale",
+              systemImage: safeMode ? "lock.shield" : "trash"
+            )
+            .foregroundStyle(.orange)
           }
           .buttonStyle(.plain)
           .disabled(safeMode)

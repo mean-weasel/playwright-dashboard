@@ -111,10 +111,11 @@ When `SMOKE_ARTIFACT_DIR` is set, the smoke test writes:
 
 There is also a manual `GUI Smoke` GitHub Actions workflow that runs this smoke
 test and uploads those artifacts. The main `CI` workflow can run the same
-Chrome-backed checks on demand with its `gui_smoke_mode` input, and the weekly
-scheduled CI run exercises both live and fallback modes. Pull request CI gates
-only the non-live `visual-structure-smoke` subset documented in
-`docs/qa-visual-snapshots.md`.
+Chrome-backed expanded-view checks on demand with its `gui_smoke_mode` input,
+and the weekly scheduled CI run exercises both live and fallback modes. Pull
+request CI gates the non-live `visual-structure-smoke` subset documented in
+`docs/qa-visual-snapshots.md`, the Safe-mode observer smoke, and the real
+Playwright CLI multi-session smoke when code paths change.
 
 For manual failures, capture:
 

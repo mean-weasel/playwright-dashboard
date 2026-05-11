@@ -57,7 +57,7 @@ extension SessionInfoBar {
     if session.lastScreenshot == nil {
       return "Control mode is available after the first browser frame."
     }
-    return "Confirm before disabling Safe read-only mode and forwarding input to the browser."
+    return "Confirm before forwarding navigation and input to this browser session."
   }
 
   func enableControlMode() {
@@ -71,6 +71,7 @@ extension SessionInfoBar {
     appState.dismissOpenURLError()
     interactionEnabled = false
     onReturnToSafeMode()
-    modeStatusMessage = "Safe mode restored. Navigation and input forwarding are disabled."
+    modeStatusMessage =
+      "Safe mode restored for this session. Navigation and input forwarding are disabled."
   }
 }

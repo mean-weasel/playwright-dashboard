@@ -15,11 +15,13 @@ final class AppState {
   var lastScreenshotSaveError: String?
   var lastOpenURLError: String?
   var lastPersistenceSaveError: String?
+  private var lastSessionSyncSaveError: String?
   private(set) var playwrightCLIStatus: PlaywrightCLIStatus = .unknown
   var isPersistenceDegraded = false
   var persistenceDegradedReason: String?
   var lastDiagnosticsExportURL: URL?
   var lastDiagnosticsExportError: String?
+  private var browserControlAuthorizedSessionIds: Set<String> = []
   let sessionFileProvider: @MainActor () -> [URL]
   let daemonDirectory: URL
   private let startWatching: @MainActor () -> Void
@@ -32,6 +34,7 @@ final class AppState {
   let safeModeProvider: @MainActor () -> Bool
   let screenshotDirectoryProvider: @MainActor () -> URL
   let urlOpener: @MainActor (URL) -> Bool
+  private let sessionSyncModelContextSaver: @MainActor (ModelContext) throws -> Void
   private let modelContextSaver: @MainActor (ModelContext?) throws -> Void
   private var sessionManager: SessionManager?
   let screenshotService = ScreenshotService()
@@ -52,6 +55,7 @@ final class AppState {
     self.safeModeProvider = { DashboardSettings.safeMode() }
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
     self.urlOpener = { NSWorkspace.shared.open($0) }
+    self.sessionSyncModelContextSaver = { try $0.save() }
     self.modelContextSaver = Self.defaultModelContextSaver
   }
   init(daemonDirectory: URL, shouldStartScreenshots: Bool = true) {
@@ -68,6 +72,7 @@ final class AppState {
     self.safeModeProvider = { DashboardSettings.safeMode() }
     self.screenshotDirectoryProvider = Self.defaultScreenshotDirectory
     self.urlOpener = { NSWorkspace.shared.open($0) }
+    self.sessionSyncModelContextSaver = { try $0.save() }
     self.modelContextSaver = Self.defaultModelContextSaver
   }
   init(
@@ -84,6 +89,9 @@ final class AppState {
     screenshotDirectoryProvider: @escaping @MainActor () -> URL =
       AppState.defaultScreenshotDirectory,
     urlOpener: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
+    sessionSyncModelContextSaver: @escaping @MainActor (ModelContext) throws -> Void = {
+      try $0.save()
+    },
     modelContextSaver: @escaping @MainActor (ModelContext?) throws -> Void =
       AppState.defaultModelContextSaver
   ) {
@@ -99,6 +107,7 @@ final class AppState {
     self.safeModeProvider = safeModeProvider
     self.screenshotDirectoryProvider = screenshotDirectoryProvider
     self.urlOpener = urlOpener
+    self.sessionSyncModelContextSaver = sessionSyncModelContextSaver
     self.modelContextSaver = modelContextSaver
   }
 
@@ -107,7 +116,10 @@ final class AppState {
     guard sessionManager == nil else { return }
 
     let manager = SessionManager(
-      sessionFileProvider: sessionFileProvider, modelContext: modelContext)
+      sessionFileProvider: sessionFileProvider,
+      modelContext: modelContext,
+      modelContextSaver: sessionSyncModelContextSaver
+    )
     self.sessionManager = manager
     self.modelContext = modelContext
 
@@ -147,6 +159,7 @@ final class AppState {
 
   func closeAndTerminate(_ session: SessionRecord) {
     guard !isSafeMode else { return }
+    revokeBrowserControl(for: session)
     beginTerminating(session)
     Task {
       await terminate(session)
@@ -191,6 +204,18 @@ final class AppState {
     saveSessionChanges()
   }
 
+  func authorizeBrowserControl(for session: SessionRecord) {
+    browserControlAuthorizedSessionIds.insert(session.sessionId)
+  }
+
+  func revokeBrowserControl(for session: SessionRecord) {
+    browserControlAuthorizedSessionIds.remove(session.sessionId)
+  }
+
+  func isBrowserControlAuthorized(for session: SessionRecord) -> Bool {
+    browserControlAuthorizedSessionIds.contains(session.sessionId)
+  }
+
   func saveSessionChanges() {
     persistSessionChanges()
   }
@@ -200,6 +225,13 @@ final class AppState {
     await manager.syncWithWatcher()
     sessions = manager.allSessions
     sessionFileErrors = manager.sessionFileErrors
+    let previousSyncSaveError = lastSessionSyncSaveError
+    lastSessionSyncSaveError = manager.lastSaveError
+    if let syncSaveError = manager.lastSaveError {
+      lastPersistenceSaveError = syncSaveError
+    } else if lastPersistenceSaveError == previousSyncSaveError {
+      lastPersistenceSaveError = nil
+    }
   }
 
   private func persistSessionChanges() {

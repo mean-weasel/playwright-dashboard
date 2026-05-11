@@ -107,6 +107,8 @@ make check-accessibility
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
+RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
+RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```
 
@@ -114,8 +116,11 @@ GUI smoke and visual snapshot tests require Accessibility permission for the
 terminal/editor, Node.js, `/usr/bin/osascript`, and any wrapper process. They
 also require Chrome, using `CHROME_PATH` when it is not installed at the default
 path.
-The recording export smoke launches the packaged app and Chrome/CDP, but avoids
-AppleScript UI traversal by using the app's smoke-only recording runner.
+The Safe-mode observer smoke verifies blocked close/cleanup/navigation/CDP
+inspector/input behavior. The Playwright CLI multi-session smoke verifies the
+real `playwright-cli` session discovery path. The recording export smoke
+launches the packaged app and Chrome/CDP, but avoids AppleScript UI traversal by
+using the app's smoke-only recording runner.
 
 Visual snapshots are artifact-only. Baseline comparison is intentionally
 non-blocking:
@@ -140,9 +145,11 @@ Pull request CI uses path filtering. Documentation-only PRs can skip code jobs;
 changes under `PlaywrightDashboard/**`, `Makefile`, `scripts/**`, `.github/**`,
 or mockup HTML files run the full code path.
 
-Scheduled and manually dispatched CI can run optional GUI smoke jobs and visual
-snapshots. The separate `GUI Smoke` workflow can manually run either live or
-fallback expanded-session smoke and upload artifacts.
+Pull request, push, merge queue, scheduled, and manual CI run the Safe-mode
+observer smoke and real Playwright CLI multi-session smoke when code paths
+change. Scheduled and manually dispatched CI can also run optional expanded-view
+GUI smoke jobs and visual snapshots. The separate `GUI Smoke` workflow can
+manually run the full GUI smoke suite and upload artifacts.
 
 ## Local PR Checklist
 

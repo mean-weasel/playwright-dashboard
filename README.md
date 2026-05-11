@@ -139,9 +139,11 @@ navigation, and forwarded click/scroll/keyboard input.
 When enabled, the dashboard, sidebar, menubar popover, and expanded session
 toolbar show a Safe badge.
 In the expanded session toolbar, choosing browser control while Safe mode is on
-requires confirmation before the app disables Safe mode and forwards input.
-After control is enabled, the same toolbar includes a Return to Safe Mode action
-that immediately stops input forwarding and blocks navigation again.
+requires confirmation before the app authorizes that specific session for
+navigation, CDP inspector access, and forwarded input. Global Safe mode remains
+enabled for other sessions. After control is enabled, the same toolbar includes a
+Return to Safe Mode action that immediately revokes that session authorization
+and blocks navigation again.
 
 ## Permissions
 
@@ -188,6 +190,8 @@ Expanded-session GUI smoke tests are opt-in:
 RUN_EXPANDED_INTERACTION_SMOKE=1 make smoke-expanded-interaction
 RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
+RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
+RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 ```
 
 To keep failure artifacts:

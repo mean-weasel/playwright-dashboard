@@ -65,6 +65,25 @@ struct SettingsView: View {
         }
       }
 
+      Section("Beta Feedback") {
+        HStack {
+          Button {
+            copyFeedbackSummary()
+          } label: {
+            Label(
+              copiedFeedbackSummary ? "Copied" : "Copy Feedback Summary",
+              systemImage: copiedFeedbackSummary ? "checkmark" : "doc.on.clipboard"
+            )
+          }
+
+          Button {
+            exportDiagnostics()
+          } label: {
+            Label("Export Diagnostics", systemImage: "square.and.arrow.down")
+          }
+        }
+      }
+
       Picker("Mark sessions stale after", selection: $staleThresholdSeconds) {
         ForEach(thresholdOptions, id: \.seconds) { option in
           Text(option.label).tag(option.seconds)
@@ -151,15 +170,6 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
           HStack {
             Button {
-              copyFeedbackSummary()
-            } label: {
-              Label(
-                copiedFeedbackSummary ? "Copied" : "Copy Feedback Summary",
-                systemImage: copiedFeedbackSummary ? "checkmark" : "doc.on.clipboard"
-              )
-            }
-
-            Button {
               copyDiagnostics()
             } label: {
               Label(
@@ -170,12 +180,6 @@ struct SettingsView: View {
           }
 
           HStack {
-            Button {
-              exportDiagnostics()
-            } label: {
-              Label("Export Diagnostics", systemImage: "square.and.arrow.down")
-            }
-
             Button {
               appState.revealApplicationSupportDirectory()
             } label: {

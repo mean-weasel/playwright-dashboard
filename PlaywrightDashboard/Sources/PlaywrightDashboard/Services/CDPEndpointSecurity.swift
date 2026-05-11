@@ -54,12 +54,29 @@ extension CDPClient {
     return normalized == "localhost"
       || normalized == "::1"
       || normalized == "0:0:0:0:0:0:0:1"
-      || normalized.hasPrefix("127.")
+      || isIPv4LoopbackLiteral(normalized)
   }
 
   private static func normalizedHost(_ host: String) -> String {
     host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
+  }
+
+  private static func isIPv4LoopbackLiteral(_ host: String) -> Bool {
+    let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+    guard parts.count == 4 else { return false }
+
+    var octets: [Int] = []
+    for part in parts {
+      guard !part.isEmpty, part.allSatisfy(\.isNumber), let value = Int(part),
+        (0...255).contains(value)
+      else {
+        return false
+      }
+      octets.append(value)
+    }
+
+    return octets.first == 127
   }
 }

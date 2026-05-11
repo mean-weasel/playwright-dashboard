@@ -57,6 +57,19 @@ jobs:
           echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Run local QA gate
+        run: make qa
+
+      - name: Check Chrome for release smoke
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for release smoke validation."
+            exit 1
+          fi
+
+      - name: Install Playwright CLI
+        run: npm install -g "@playwright/cli@0.1.5"
+
       - name: Import Developer ID certificate
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -114,6 +127,20 @@ jobs:
             DEVELOPER_ID_IDENTITY="$IDENTITY"
 
           codesign --verify --deep --strict --verbose=2 dist/PlaywrightDashboard.app
+
+      - name: Run Safe-mode observer smoke
+        env:
+          RUN_SAFE_MODE_OBSERVER_SMOKE: "1"
+          SMOKE_REUSE_PACKAGE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/release-smoke-safe-mode-observer
+        run: make smoke-safe-mode-observer
+
+      - name: Run Playwright CLI multi-session smoke
+        env:
+          RUN_PLAYWRIGHT_CLI_MULTI_SMOKE: "1"
+          SMOKE_REUSE_PACKAGE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/release-smoke-playwright-cli-multi-session
+        run: make smoke-playwright-cli-multi-session
 
       - name: Notarize and staple app
         timeout-minutes: 45

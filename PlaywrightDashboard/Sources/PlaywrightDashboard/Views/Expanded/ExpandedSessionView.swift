@@ -9,8 +9,8 @@ struct ExpandedSessionView: View {
   let session: SessionRecord
   var onBack: (() -> Void)?
   @AppStorage("expandedShowMetadata") private var showMetadata = true
-  @AppStorage("expandedInteractionEnabled") var interactionEnabled = false
   @AppStorage(DashboardSettings.safeModeKey) var safeMode = true
+  @State var interactionEnabled = false
   @State var consecutiveFailures = 0
   @State var pageConnection: CDPPageConnection?
   @State var fallbackInputClient: CDPClient?
@@ -69,7 +69,7 @@ struct ExpandedSessionView: View {
         onDismissRecordingExportError: { recordingExportError = nil },
         showMetadata: $showMetadata,
         interactionEnabled: interactionModeBinding,
-        safeModeEnabled: safeMode,
+        safeModeEnabled: sessionSafeModeEnabled,
         connectionSummary: connectionSummary
       )
 
@@ -101,6 +101,7 @@ struct ExpandedSessionView: View {
       await runSmokeNavigationIfNeeded()
     }
     .onAppear {
+      initializeInteractionState()
       reportSmokeExpandedReadiness()
     }
     .onChange(of: expandedReadinessSignature) {
@@ -230,7 +231,7 @@ struct ExpandedSessionView: View {
   }
 
   func navigate(to rawURL: String) async throws -> String {
-    guard !appState.isSafeMode else {
+    guard !sessionSafeModeEnabled else {
       throw SafeModeBlockedError()
     }
     guard session.cdpPort > 0 else {

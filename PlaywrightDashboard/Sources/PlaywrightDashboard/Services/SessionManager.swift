@@ -37,6 +37,8 @@ final class SessionManager {
   private let modelContext: ModelContext
   private let closedSessionRetentionProvider: () -> Duration?
   private let sessionFileScanner: SessionFileScanner
+  private let modelContextSaver: @MainActor (ModelContext) throws -> Void
+  private(set) var lastSaveError: String?
 
   // MARK: - Init
 
@@ -45,6 +47,7 @@ final class SessionManager {
     self.modelContext = modelContext
     self.closedSessionRetentionProvider = { DashboardSettings.closedSessionRetention() }
     self.sessionFileScanner = SessionFileScanner()
+    self.modelContextSaver = { try $0.save() }
     loadExistingRecords()
   }
 
@@ -54,12 +57,14 @@ final class SessionManager {
     closedSessionRetentionProvider: @escaping () -> Duration? = {
       DashboardSettings.closedSessionRetention()
     },
-    sessionFileScanner: SessionFileScanner = SessionFileScanner()
+    sessionFileScanner: SessionFileScanner = SessionFileScanner(),
+    modelContextSaver: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
   ) {
     self.sessionFileProvider = sessionFileProvider
     self.modelContext = modelContext
     self.closedSessionRetentionProvider = closedSessionRetentionProvider
     self.sessionFileScanner = sessionFileScanner
+    self.modelContextSaver = modelContextSaver
     loadExistingRecords()
   }
 
@@ -74,6 +79,7 @@ final class SessionManager {
 
     let liveConfigs = scanResult.configs
     let liveIds = Set(liveConfigs.map(\.name))
+    let presentButUnresolvedIds = scanResult.unresolvedSessionIds
 
     // 1. Upsert each live config
     for config in liveConfigs {
@@ -84,6 +90,7 @@ final class SessionManager {
     for record in allRecords where !record.sessionId.isEmpty {
       if record.status != .closed && record.status != .closing
         && !liveIds.contains(record.sessionId)
+        && !presentButUnresolvedIds.contains(record.sessionId)
       {
         record.close(byUser: false)
       }
@@ -93,8 +100,10 @@ final class SessionManager {
 
     // 3. Persist
     do {
-      try modelContext.save()
+      try modelContextSaver(modelContext)
+      lastSaveError = nil
     } catch {
+      lastSaveError = error.localizedDescription
       logger.error("SwiftData save failed: \(error.localizedDescription)")
       modelContext.rollback()
       loadExistingRecords()

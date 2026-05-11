@@ -8,6 +8,7 @@ struct SessionFileScanResult: Sendable {
   let configs: [SessionFileConfig]
   let errors: [String: String]
   let skippedFiles: [String: String]
+  let unresolvedSessionIds: Set<String>
 }
 
 actor SessionFileScanner {
@@ -30,6 +31,7 @@ actor SessionFileScanner {
     var configs: [SessionFileConfig] = []
     var errors: [String: String] = [:]
     var skippedFiles: [String: String] = [:]
+    var unresolvedSessionIds: Set<String> = []
 
     for url in fileURLs.prefix(maxFilesPerScan) {
       do {
@@ -41,6 +43,7 @@ actor SessionFileScanner {
           )
           errors[url.lastPathComponent] = message
           skippedFiles[url.lastPathComponent] = message
+          unresolvedSessionIds.insert(sessionIdCandidate(for: url))
           continue
         }
 
@@ -51,6 +54,7 @@ actor SessionFileScanner {
           "Cannot read or parse session file \(url.lastPathComponent): \(error.localizedDescription)"
         )
         errors[url.lastPathComponent] = error.localizedDescription
+        unresolvedSessionIds.insert(sessionIdCandidate(for: url))
       }
     }
 
@@ -63,14 +67,24 @@ actor SessionFileScanner {
         )
         errors[url.lastPathComponent] = message
         skippedFiles[url.lastPathComponent] = message
+        unresolvedSessionIds.insert(sessionIdCandidate(for: url))
       }
     }
 
-    return SessionFileScanResult(configs: configs, errors: errors, skippedFiles: skippedFiles)
+    return SessionFileScanResult(
+      configs: configs,
+      errors: errors,
+      skippedFiles: skippedFiles,
+      unresolvedSessionIds: unresolvedSessionIds
+    )
   }
 
   private func sessionFileSize(_ url: URL) throws -> Int? {
     let values = try url.resourceValues(forKeys: [.fileSizeKey])
     return values.fileSize
+  }
+
+  private func sessionIdCandidate(for url: URL) -> String {
+    url.deletingPathExtension().lastPathComponent
   }
 }

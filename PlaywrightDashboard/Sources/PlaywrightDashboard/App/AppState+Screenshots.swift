@@ -8,8 +8,9 @@ extension AppState {
       return nil
     }
 
+    let sessionName = Self.sanitizedScreenshotPathComponent(session.sessionId)
     let url = screenshotDirectoryProvider()
-      .appendingPathComponent("\(session.sessionId)-\(Self.filenameTimestamp()).jpg")
+      .appendingPathComponent("\(sessionName)-\(Self.filenameTimestamp()).jpg")
 
     do {
       try data.write(to: url, options: .atomic)
@@ -32,5 +33,15 @@ extension AppState {
     return formatter.string(from: date)
       .replacingOccurrences(of: ":", with: "-")
       .replacingOccurrences(of: ".", with: "-")
+  }
+
+  static func sanitizedScreenshotPathComponent(_ text: String) -> String {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
+    let scalars = text.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
+    let sanitized =
+      String(scalars)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: " ", with: "-")
+    return sanitized.isEmpty ? "screenshot" : sanitized
   }
 }

@@ -21,6 +21,13 @@ struct AutoLabelerTests {
     #expect(AutoLabeler.titleCase(workspaceName: "api-sdk-cli") == "API SDK CLI")
   }
 
+  @Test("Camel case product names preserve internal capitals")
+  func camelCaseProductNames() {
+    #expect(AutoLabeler.titleCase(workspaceName: "PlaywrightDashboard") == "PlaywrightDashboard")
+    #expect(AutoLabeler.titleCase(workspaceName: "myHTTPServer") == "myHTTPServer")
+    #expect(AutoLabeler.titleCase(workspaceName: "playwright-dashboard") == "Playwright Dashboard")
+  }
+
   @Test("Trailing 4-char hex hash is stripped")
   func trailingHash4() {
     #expect(AutoLabeler.titleCase(workspaceName: "admin-ux-25c2") == "Admin UX")

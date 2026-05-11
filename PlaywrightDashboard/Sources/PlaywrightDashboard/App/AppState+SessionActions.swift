@@ -10,6 +10,7 @@ extension AppState {
 
   func close(_ session: SessionRecord, byUser: Bool = true) {
     guard !isSafeMode else { return }
+    revokeBrowserControl(for: session)
     if selectedSessionId == session.sessionId {
       selectedSessionId = nil
     }
@@ -27,6 +28,7 @@ extension AppState {
     var didCloseSelectedSession = false
     for session in sessions where session.status == .stale {
       didCloseSelectedSession = didCloseSelectedSession || selectedSessionId == session.sessionId
+      revokeBrowserControl(for: session)
       session.close(byUser: true)
     }
     if didCloseSelectedSession {
