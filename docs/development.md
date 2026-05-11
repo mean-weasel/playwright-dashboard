@@ -183,6 +183,26 @@ build, unit tests, coverage, file-size checks, mockup validation, and package
 validation. CI uploads build logs, test logs, coverage JSON, and the packaged app
 zip.
 
+### Coverage Floor
+
+The `coverage` job in `.github/workflows/ci.yml` enforces two floors:
+
+- `SOURCE_COVERAGE_FLOOR` (default `30`): the aggregate line coverage of
+  everything under `Sources/PlaywrightDashboard/` must be at least this
+  percentage. If it drops below, the job fails.
+- `PER_FILE_COVERAGE_FLOOR` (default `10`): every file under
+  `Sources/PlaywrightDashboard/Services/` or `Sources/PlaywrightDashboard/Models/`
+  with at least `PER_FILE_FLOOR_MIN_LINES` (default `15`) executable lines must
+  be covered above this percentage. Files smaller than the threshold are
+  exempt, and View files are intentionally not subject to the per-file floor
+  because UI code is mostly exercised by GUI smokes.
+
+The initial values were picked from the current baseline (source coverage was
+30.15% when the floor was introduced). Raise them in follow-up PRs as tests
+fill in. Set the env knobs in the workflow's `coverage` job to change the
+thresholds; the job summary prints both the current values and any
+violations.
+
 Pull request CI uses path filtering. Documentation-only PRs can skip code jobs;
 changes under `PlaywrightDashboard/**`, `Makefile`, `scripts/**`, `.github/**`,
 or mockup HTML files run the full code path.

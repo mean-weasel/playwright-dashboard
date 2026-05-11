@@ -162,7 +162,11 @@ jobs:
         run: |
           swift test --enable-code-coverage
           echo "CODECOV_PATH=$(swift test --show-codecov-path)" >> "$GITHUB_ENV"
-      - name: Coverage summary
+      - name: Coverage summary and floor enforcement
+        env:
+          SOURCE_COVERAGE_FLOOR: "30"
+          PER_FILE_COVERAGE_FLOOR: "10"
+          PER_FILE_FLOOR_MIN_LINES: "15"
         run: |
           node <<'NODE'
           const fs = require("fs");
@@ -183,6 +187,12 @@ jobs:
             return { ...lines, percent };
           }
 
+          function relPath(file) {
+            const marker = "/PlaywrightDashboard/Sources/PlaywrightDashboard/";
+            const idx = file.filename.indexOf(marker);
+            return idx >= 0 ? file.filename.slice(idx + marker.length) : file.filename;
+          }
+
           const total = summarize(files);
           const sourceFiles = files.filter((file) =>
             file.filename.includes("/PlaywrightDashboard/Sources/"),
@@ -190,7 +200,7 @@ jobs:
           const source = summarize(sourceFiles);
           const lowestSourceFiles = sourceFiles
             .map((file) => ({
-              filename: file.filename.split("/PlaywrightDashboard/Sources/").at(-1),
+              filename: relPath(file),
               percent: file.summary?.lines?.percent ?? 0,
               count: file.summary?.lines?.count ?? 0,
               covered: file.summary?.lines?.covered ?? 0,
@@ -199,6 +209,38 @@ jobs:
             .sort((a, b) => a.percent - b.percent)
             .slice(0, 10);
 
+          const sourceFloor = Number(process.env.SOURCE_COVERAGE_FLOOR ?? "0");
+          const perFileFloor = Number(process.env.PER_FILE_COVERAGE_FLOOR ?? "0");
+          const perFileMinLines = Number(process.env.PER_FILE_FLOOR_MIN_LINES ?? "0");
+          const violations = [];
+
+          if (sourceFloor > 0 && source.percent < sourceFloor) {
+            violations.push(
+              `Source coverage ${source.percent.toFixed(2)}% is below the ${sourceFloor}% floor`,
+            );
+          }
+
+          const perFileEnforced = sourceFiles
+            .map((file) => ({
+              rel: relPath(file),
+              percent: file.summary?.lines?.percent ?? 0,
+              count: file.summary?.lines?.count ?? 0,
+            }))
+            .filter(
+              (file) =>
+                (file.rel.startsWith("Services/") || file.rel.startsWith("Models/")) &&
+                file.count >= perFileMinLines,
+            );
+          if (perFileFloor > 0) {
+            for (const file of perFileEnforced) {
+              if (file.percent < perFileFloor) {
+                violations.push(
+                  `${file.rel}: ${file.percent.toFixed(2)}% is below the ${perFileFloor}% per-file floor (${file.count} lines)`,
+                );
+              }
+            }
+          }
+
           fs.appendFileSync(
             process.env.GITHUB_STEP_SUMMARY,
             [
@@ -206,6 +248,8 @@ jobs:
               "",
               `Total lines: ${total.covered}/${total.count} (${total.percent.toFixed(2)}%)`,
               `Source lines: ${source.covered}/${source.count} (${source.percent.toFixed(2)}%)`,
+              "",
+              `Source floor: ${sourceFloor}% — per-file floor: ${perFileFloor}% (Services/Models, files ≥ ${perFileMinLines} lines)`,
               "",
               "### Lowest Source Files",
               "",
@@ -216,8 +260,19 @@ jobs:
                   `| ${file.filename} | ${file.covered}/${file.count} | ${file.percent.toFixed(2)}% |`,
               ),
               "",
+              violations.length === 0
+                ? "_Coverage floors satisfied._"
+                : `**Coverage floor violations (${violations.length}):**\n\n${violations.map((v) => `- ${v}`).join("\n")}`,
+              "",
             ].join("\n"),
           );
+
+          if (violations.length > 0) {
+            for (const msg of violations) {
+              console.error(`::error::${msg}`);
+            }
+            process.exit(1);
+          }
           NODE
       - name: Upload coverage JSON
         uses: actions/upload-artifact@v6
