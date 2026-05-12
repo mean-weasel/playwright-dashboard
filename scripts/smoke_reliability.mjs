@@ -150,7 +150,8 @@ try {
     `dashboard reflects ${specs.restart.sessionId} as closed/missing after CLI close`,
     killSlaMs,
   );
-  logProgress("Closed and reflected; waiting for socket cleanup before reopening");
+  logProgress("Closed and reflected; waiting for daemon + socket cleanup before reopening");
+  await ensureDaemonGone(specs.restart.sessionId);
   await waitForSocketCleanup(specs.restart.socketPath);
 
   // Clear cdpPort so we re-read after the new daemon assigns a fresh one.
@@ -320,6 +321,24 @@ async function waitForSocketCleanup(socketPath, timeoutMs = 10_000) {
     await sleep(200);
   }
   await rm(socketPath, { force: true }).catch(() => {});
+}
+
+async function ensureDaemonGone(sessionId, timeoutMs = 8_000) {
+  // `playwright-cli close` returns once the daemon acknowledges the close
+  // request, but the daemon process may take a moment to exit and release
+  // its Unix socket. Wait for any process whose cmdline mentions
+  // cli-daemon and this session id to disappear; force-kill on timeout.
+  const pattern = `cli-daemon.*${sessionId}`;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { stdout } = await run("pgrep", ["-f", "--", pattern], {
+      timeout: 2_000,
+    }).catch(() => ({ stdout: "" }));
+    if (!stdout.trim()) return;
+    await sleep(200);
+  }
+  await run("pkill", ["-9", "-f", pattern], { timeout: 2_000 }).catch(() => {});
+  await sleep(500);
 }
 
 async function findSessionFile(root, filename) {
