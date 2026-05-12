@@ -39,10 +39,19 @@ const cliEnv = {
 };
 const smokeId = String(process.pid);
 
+// Keep session ids short — macOS Unix sockets cap `sun_path` at 104 bytes
+// and the daemon socket path lives under `/var/folders/.../T/pw-<8>/cli/`
+// which already consumes ~65 bytes on CI runners. A 21-char session id
+// (e.g. `cli-rel-restart-<pid>`) plus the workspace-hash prefix pushed the
+// full path to 108 bytes on macos-15 runners, where the kernel silently
+// truncates to 104, the daemon ends up bound to a `<name>.` file (no
+// `.sock`), the .session file still records `<name>.sock`, and the
+// next bind() collides on the truncated path → EADDRINUSE. Local repros
+// pass because $TMPDIR is shorter.
 const specs = {
   kill: {
     slug: "kill",
-    sessionId: `cli-rel-kill-${smokeId}`,
+    sessionId: `rk-${smokeId}`,
     label: "Reliability Kill",
     debugPort: 0,
     sessionFile: null,
@@ -51,7 +60,7 @@ const specs = {
   },
   restart: {
     slug: "restart",
-    sessionId: `cli-rel-restart-${smokeId}`,
+    sessionId: `rr-${smokeId}`,
     label: "Reliability Restart",
     debugPort: 0,
     sessionFile: null,
