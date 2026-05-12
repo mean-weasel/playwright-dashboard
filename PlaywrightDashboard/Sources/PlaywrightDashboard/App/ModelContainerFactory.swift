@@ -46,6 +46,23 @@ enum ModelContainerFactory {
   }
 
   @MainActor
+  static func makeWithCustomStore(at directory: URL) -> ModelContainerCreation {
+    let storeURL = directory.appendingPathComponent("playwright-dashboard.store")
+    return make(
+      persistent: {
+        try FileManager.default.createDirectory(
+          at: directory, withIntermediateDirectories: true)
+        let configuration = ModelConfiguration(url: storeURL)
+        return try ModelContainer(for: SessionRecord.self, configurations: configuration)
+      },
+      fallback: {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(for: SessionRecord.self, configurations: configuration)
+      }
+    )
+  }
+
+  @MainActor
   static func make(
     persistent: () throws -> ModelContainer,
     fallback: () throws -> ModelContainer

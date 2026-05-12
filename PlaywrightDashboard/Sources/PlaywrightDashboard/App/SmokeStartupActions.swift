@@ -13,6 +13,9 @@ enum SmokeStartupActions {
     if let sessionId = arguments.markSessionClosedId {
       pending.append(.markClosed(sessionId: sessionId))
     }
+    if let sourceId = arguments.reorderSourceId, let targetId = arguments.reorderTargetId {
+      pending.append(.reorder(sourceId: sourceId, targetId: targetId))
+    }
     guard !pending.isEmpty else { return }
 
     let deadline = Date().addingTimeInterval(deadlineInterval)
@@ -58,6 +61,14 @@ enum SmokeStartupActions {
         } else {
           unfinished.append(action)
         }
+      case .reorder(let sourceId, let targetId):
+        let hasSource = appState.sessions.contains(where: { $0.sessionId == sourceId })
+        let hasTarget = appState.sessions.contains(where: { $0.sessionId == targetId })
+        if hasSource && hasTarget {
+          _ = appState.reorder(sourceId: sourceId, targetId: targetId)
+        } else {
+          unfinished.append(action)
+        }
       }
     }
     return unfinished
@@ -66,11 +77,13 @@ enum SmokeStartupActions {
   private enum Action: CustomStringConvertible {
     case rename(sessionId: String, to: String)
     case markClosed(sessionId: String)
+    case reorder(sourceId: String, targetId: String)
 
     var description: String {
       switch self {
       case .rename(let id, let name): "rename(\(id) -> \(name))"
       case .markClosed(let id): "markClosed(\(id))"
+      case .reorder(let source, let target): "reorder(\(source) <-> \(target))"
       }
     }
   }
