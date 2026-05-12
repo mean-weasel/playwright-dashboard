@@ -128,6 +128,38 @@ jobs:
 
           codesign --verify --deep --strict --verbose=2 dist/PlaywrightDashboard.app
 
+      - name: Create notarization-ready zip
+        run: |
+          set -euo pipefail
+          rm -f dist/PlaywrightDashboard.zip
+          ditto -c -k --keepParent dist/PlaywrightDashboard.app dist/PlaywrightDashboard.zip
+
+      - name: Write release metadata sidecar
+        env:
+          APP_VERSION: ${{ steps.metadata.outputs.version }}
+          BUILD_NUMBER: ${{ steps.metadata.outputs.build_number }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          cat > dist/release-metadata.json <<METADATA
+          {
+            "version": "$APP_VERSION",
+            "build_number": "$BUILD_NUMBER",
+            "artifact_name": "$ARTIFACT_NAME",
+            "source_run_id": "$GITHUB_RUN_ID"
+          }
+          METADATA
+
+      - name: Upload pre-notarization signed zip
+        uses: actions/upload-artifact@v6
+        with:
+          name: signed-app-prestaple
+          path: |
+            dist/PlaywrightDashboard.zip
+            dist/release-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Run Safe-mode observer smoke
         env:
           RUN_SAFE_MODE_OBSERVER_SMOKE: "1"
@@ -166,9 +198,6 @@ jobs:
             --issuer "$APPLE_API_ISSUER_ID"
           )
 
-          rm -f "$ZIP"
-          ditto -c -k --keepParent "$APP" "$ZIP"
-
           xcrun notarytool submit "$ZIP" \
             "${notarytool_args[@]}" \
             --output-format json > "$SUBMIT_JSON"
@@ -181,6 +210,13 @@ jobs:
           fi
 
           echo "::notice title=Notarization submitted::Submission $SUBMISSION_ID"
+          {
+            echo "## Notarization"
+            echo ""
+            echo "- **Submission ID:** \`$SUBMISSION_ID\`"
+            echo "- **Source run ID:** \`$GITHUB_RUN_ID\`"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
           STATUS="Unknown"
           for attempt in $(seq 1 40); do
@@ -201,6 +237,10 @@ jobs:
                   "${notarytool_args[@]}" \
                   --output-format json > "$LOG_JSON" || true
                 cat "$LOG_JSON"
+                {
+                  echo "**Status:** \`$STATUS\` — see notary log above. Re-running release will not help; fix the underlying signing or entitlement issue first."
+                  echo ""
+                } >> "$GITHUB_STEP_SUMMARY"
                 exit 1
                 ;;
             esac
@@ -209,11 +249,24 @@ jobs:
           done
 
           if [ "$STATUS" != "Accepted" ]; then
-            echo "::error::Timed out waiting for notarization submission $SUBMISSION_ID; last status was $STATUS"
+            echo "::error::Apple has not yet accepted submission $SUBMISSION_ID; last status was '$STATUS'. This usually means Apple is still processing — not that the submission was rejected."
             xcrun notarytool log "$SUBMISSION_ID" \
               "${notarytool_args[@]}" \
               --output-format json > "$LOG_JSON" || true
-            cat "$LOG_JSON"
+            cat "$LOG_JSON" || true
+            {
+              echo "**Status:** \`$STATUS\` — Apple is still processing. The signed pre-staple zip has been uploaded as the \`signed-app-prestaple\` artifact on this run, so it is not lost."
+              echo ""
+              echo "### Recovery"
+              echo ""
+              echo "Once \`Notary Status\` reports \`Accepted\` for this submission, run the \`Notary Complete\` workflow with:"
+              echo ""
+              echo "- \`source_run_id\`: \`$GITHUB_RUN_ID\`"
+              echo "- \`submission_id\`: \`$SUBMISSION_ID\`"
+              echo ""
+              echo "That workflow downloads the pre-staple artifact, staples the ticket, re-zips, and publishes the final release artifact."
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 

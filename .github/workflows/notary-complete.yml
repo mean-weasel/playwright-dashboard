@@ -1,0 +1,232 @@
+name: Notary Complete
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: The Release run ID that produced the `signed-app-prestaple` artifact (visible in the failing release run's URL).
+        required: true
+        type: string
+      submission_id:
+        description: Apple notarization submission ID to verify and staple.
+        required: true
+        type: string
+      release_tag:
+        description: Optional GitHub Release tag to publish the final artifact to (e.g. `v0.1.0`). Leave empty to only upload as a workflow artifact.
+        required: false
+        type: string
+
+concurrency:
+  group: notary-complete-${{ inputs.submission_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  complete:
+    name: Staple and Publish
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: apple-signing
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+
+      - name: Verify required inputs
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SUBMISSION_ID: ${{ inputs.submission_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SOURCE_RUN_ID" ]; then
+            echo "::error::source_run_id is required"
+            exit 2
+          fi
+          if [ -z "$SUBMISSION_ID" ]; then
+            echo "::error::submission_id is required"
+            exit 2
+          fi
+
+      - name: Download pre-staple signed zip
+        uses: actions/download-artifact@v6
+        with:
+          name: signed-app-prestaple
+          path: ${{ runner.temp }}/prestaple
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: Stage signed app from artifact
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+          cp "$RUNNER_TEMP/prestaple/PlaywrightDashboard.zip" dist/PlaywrightDashboard.zip
+          cp "$RUNNER_TEMP/prestaple/release-metadata.json" dist/release-metadata.json
+          ditto -x -k dist/PlaywrightDashboard.zip dist
+          test -d dist/PlaywrightDashboard.app
+          test -x dist/PlaywrightDashboard.app/Contents/MacOS/PlaywrightDashboard
+
+      - name: Read release metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          VERSION="$(plutil -extract version raw -o - dist/release-metadata.json)"
+          BUILD_NUMBER="$(plutil -extract build_number raw -o - dist/release-metadata.json)"
+          ARTIFACT_NAME="$(plutil -extract artifact_name raw -o - dist/release-metadata.json)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Release metadata::version=$VERSION build=$BUILD_NUMBER artifact=$ARTIFACT_NAME"
+
+      - name: Confirm notarization accepted
+        timeout-minutes: 30
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          SUBMISSION_ID: ${{ inputs.submission_id }}
+        run: |
+          set -euo pipefail
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          INFO_JSON="$RUNNER_TEMP/notary-info.json"
+          LOG_JSON="$RUNNER_TEMP/notary-log.json"
+
+          echo "$APPLE_API_KEY_BASE64" | base64 -D > "$API_KEY_PATH"
+
+          notarytool_args=(
+            --key "$API_KEY_PATH"
+            --key-id "$APPLE_API_KEY_ID"
+            --issuer "$APPLE_API_ISSUER_ID"
+          )
+
+          STATUS="Unknown"
+          for attempt in $(seq 1 25); do
+            xcrun notarytool info "$SUBMISSION_ID" \
+              "${notarytool_args[@]}" \
+              --output-format json > "$INFO_JSON"
+            STATUS="$(plutil -extract status raw -o - "$INFO_JSON")"
+            echo "::notice title=Notarization status::Submission $SUBMISSION_ID is $STATUS (attempt $attempt/25)"
+            case "$STATUS" in
+              Accepted) break ;;
+              Invalid|Rejected)
+                echo "::error::Notarization $STATUS for $SUBMISSION_ID"
+                xcrun notarytool log "$SUBMISSION_ID" \
+                  "${notarytool_args[@]}" \
+                  --output-format json > "$LOG_JSON" || true
+                cat "$LOG_JSON"
+                exit 1
+                ;;
+            esac
+            sleep 60
+          done
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::error::Apple has not yet accepted submission $SUBMISSION_ID after 25 minutes; re-run this workflow later"
+            exit 1
+          fi
+
+      - name: Staple ticket and verify
+        run: |
+          set -euo pipefail
+          APP="dist/PlaywrightDashboard.app"
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Re-zip stapled app
+        run: |
+          set -euo pipefail
+          rm -f dist/PlaywrightDashboard.zip
+          ditto -c -k --keepParent dist/PlaywrightDashboard.app dist/PlaywrightDashboard.zip
+
+      - name: Verify release package
+        env:
+          APP_VERSION: ${{ steps.metadata.outputs.version }}
+          BUILD_NUMBER: ${{ steps.metadata.outputs.build_number }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+
+          VERIFY_DIR="$RUNNER_TEMP/playwright-dashboard-release-verify"
+          INFO_PLIST="$VERIFY_DIR/PlaywrightDashboard.app/Contents/Info.plist"
+
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          ditto -x -k dist/PlaywrightDashboard.zip "$VERIFY_DIR"
+
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
+
+          if [ "$SHORT_VERSION" != "$APP_VERSION" ]; then
+            echo "::error::Expected CFBundleShortVersionString $APP_VERSION, got $SHORT_VERSION"
+            exit 1
+          fi
+
+          if [ "$BUNDLE_VERSION" != "$BUILD_NUMBER" ]; then
+            echo "::error::Expected CFBundleVersion $BUILD_NUMBER, got $BUNDLE_VERSION"
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$VERIFY_DIR/PlaywrightDashboard.app"
+          spctl --assess --type execute --verbose=4 "$VERIFY_DIR/PlaywrightDashboard.app"
+          RUN_RELEASE_LAUNCH_SMOKE=1 \
+            RELEASE_APP_PATH="$VERIFY_DIR/PlaywrightDashboard.app" \
+            make smoke-release-launch
+
+          cp dist/PlaywrightDashboard.zip "dist/$ARTIFACT_NAME"
+          shasum -a 256 "dist/$ARTIFACT_NAME" > "dist/$ARTIFACT_NAME.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.metadata.outputs.artifact_name }}
+            dist/${{ steps.metadata.outputs.artifact_name }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload artifact to GitHub Release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes "Notarized Playwright Dashboard release $RELEASE_TAG."
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            "dist/$ARTIFACT_NAME" \
+            "dist/$ARTIFACT_NAME.sha256" \
+            --clobber
+
+      - name: Recovery summary
+        if: always()
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SUBMISSION_ID: ${{ inputs.submission_id }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          {
+            echo "## Notary Complete"
+            echo ""
+            echo "- **Source run ID:** \`$SOURCE_RUN_ID\`"
+            echo "- **Submission ID:** \`$SUBMISSION_ID\`"
+            echo "- **Artifact:** \`$ARTIFACT_NAME\`"
+            if [ -n "$RELEASE_TAG" ]; then
+              echo "- **Release tag:** \`$RELEASE_TAG\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
