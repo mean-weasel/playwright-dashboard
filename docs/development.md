@@ -170,11 +170,16 @@ The reliability smoke covers two of the three failure modes called out in
   `@playwright/cli` so `makeSocketPath` errors out instead of silently
   producing a too-long path.
 
-The third failure mode, **sleep/wake CDP reconnect**, is intentionally
-deferred. A `macos-15` GitHub runner cannot meaningfully simulate sleep
-(`pmset sleepnow` needs root and the runner host does not actually
-suspend), so the assertion would be non-deterministic. It remains an
-open follow-up under #51.
+- **Sleep/wake CDP reconnect** (Phase 3) — `pmset sleepnow` needs root and
+  the runner host does not actually suspend, so the smoke simulates sleep
+  by `SIGSTOP`ping Chrome's main process. Chrome's CDP TCP server lives
+  in that process, so a stopped Chrome looks exactly like a sleeping
+  device from the dashboard: the WebSocket goes silent. After
+  `RELIABILITY_SLEEP_DURATION_MS` (default 12 s) the smoke sends
+  `SIGCONT` and asserts the dashboard exits the disconnected state within
+  `RELIABILITY_WAKE_RECOVERY_SLA_MS` (default 30 s) — either reconnecting
+  screencast (`liveScreencast`) or falling back to snapshot polling
+  (`snapshotFallback`), but not stuck in `connectionLost`.
 
 ```sh
 RUN_RELIABILITY_SMOKE=1 make smoke-reliability

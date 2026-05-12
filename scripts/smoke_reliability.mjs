@@ -25,6 +25,14 @@ const teardownSettleMs = Number.parseInt(
   process.env.RELIABILITY_TEARDOWN_SETTLE_MS ?? "5000",
   10,
 );
+const sleepDurationMs = Number.parseInt(
+  process.env.RELIABILITY_SLEEP_DURATION_MS ?? "12000",
+  10,
+);
+const wakeRecoverySlaMs = Number.parseInt(
+  process.env.RELIABILITY_WAKE_RECOVERY_SLA_MS ?? "30000",
+  10,
+);
 const accessibilityHelp = staticAccessibilityHelp();
 const tmpRoot = await mkdtemp(
   path.join(os.tmpdir(), "playwright-dashboard-reliability-smoke-"),
@@ -67,6 +75,15 @@ const specs = {
     socketPath: null,
     server: null,
   },
+  sleepwake: {
+    slug: "sleepwake",
+    sessionId: `rw-${smokeId}`,
+    label: "Reliability SleepWake",
+    debugPort: 0,
+    sessionFile: null,
+    socketPath: null,
+    server: null,
+  },
 };
 
 let appOpened = false;
@@ -92,6 +109,11 @@ try {
   await openPlaywrightSession(specs.kill, specs.kill.server.rootURL);
   await loadRealSessionFile(specs.kill);
   logProgress(`${specs.kill.label} ready on CDP ${specs.kill.debugPort}`);
+
+  logProgress(`Opening sleep/wake-target CLI session ${specs.sleepwake.sessionId}`);
+  await openPlaywrightSession(specs.sleepwake, specs.sleepwake.server.rootURL);
+  await loadRealSessionFile(specs.sleepwake);
+  logProgress(`${specs.sleepwake.label} ready on CDP ${specs.sleepwake.debugPort}`);
 
   logProgress("Disabling persisted control mode default");
   await run("defaults", [
@@ -184,6 +206,51 @@ try {
   logProgress(`Phase 2 passed: rediscovered within ${Date.now() - restartStart} ms`);
 
   await quitApp();
+
+  // Phase 3: sleep/wake CDP reconnect. Simulate sleep by SIGSTOPping the
+  // Chrome process — the CDP TCP server is part of Chrome's main process, so
+  // a stopped Chrome looks exactly like a sleeping device from the
+  // dashboard's perspective: no I/O on the WebSocket. Wake with SIGCONT and
+  // assert the dashboard exits the disconnected state — either reconnecting
+  // screencast or falling back to snapshot polling, but not stuck in
+  // `connectionLost`.
+  logProgress(`Phase 3: launching dashboard with ${specs.sleepwake.sessionId} in expanded view`);
+  await launchApp(specs.sleepwake.sessionId);
+  await waitForExpandedReadiness(
+    (payload) =>
+      payload.session?.sessionId === specs.sleepwake.sessionId
+      && typeof payload.frameMode === "string"
+      && payload.frameMode !== "connectionLost",
+    `expanded view reaches a non-disconnected frameMode for ${specs.sleepwake.sessionId}`,
+    60_000,
+  );
+  const initialPayload = await readExpandedReadiness();
+  logProgress(
+    `Phase 3 initial state: frameMode=${initialPayload.frameMode}, targetMonitorMode=${initialPayload.targetMonitorMode}`,
+  );
+
+  logProgress(`SIGSTOP Chrome (port ${specs.sleepwake.debugPort}) to simulate sleep`);
+  const stoppedPids = await signalChromeForPort(specs.sleepwake.debugPort, "STOP");
+  logProgress(`Stopped ${stoppedPids.length} Chrome PID(s): ${stoppedPids.join(", ")}`);
+  logProgress(`Sleeping ${sleepDurationMs} ms before resuming`);
+  await sleep(sleepDurationMs);
+
+  logProgress(`SIGCONT Chrome (port ${specs.sleepwake.debugPort}) to simulate wake`);
+  await signalChromeForPort(specs.sleepwake.debugPort, "CONT");
+  const recoveryStart = Date.now();
+  const recovered = await waitForExpandedReadiness(
+    (payload) =>
+      payload.session?.sessionId === specs.sleepwake.sessionId
+      && (payload.frameMode === "liveScreencast"
+        || payload.frameMode === "snapshotFallback"),
+    `dashboard recovers from sleep (frameMode in {liveScreencast, snapshotFallback}) for ${specs.sleepwake.sessionId}`,
+    wakeRecoverySlaMs,
+  );
+  logProgress(
+    `Phase 3 passed: dashboard recovered after wake in ${Date.now() - recoveryStart} ms (frameMode=${recovered.frameMode}, targetMonitorMode=${recovered.targetMonitorMode})`,
+  );
+
+  await quitApp();
   logProgress("Reliability smoke assertions passed");
   console.log("Reliability smoke passed");
 } catch (error) {
@@ -198,11 +265,11 @@ try {
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
-async function launchApp() {
+async function launchApp(selectedSessionId = null) {
   currentReadinessDir = path.join(readinessRoot, `launch-${++launchIndex}`);
   await rm(currentReadinessDir, { recursive: true, force: true });
   await mkdir(currentReadinessDir, { recursive: true });
-  await run("open", [
+  const appArgs = [
     "-n",
     appPath,
     "--args",
@@ -213,7 +280,11 @@ async function launchApp() {
     "--smoke-safe-mode",
     "--smoke-readiness-dir",
     currentReadinessDir,
-  ]);
+  ];
+  if (selectedSessionId) {
+    appArgs.push("--smoke-session-id", selectedSessionId);
+  }
+  await run("open", appArgs);
   appOpened = true;
 }
 
@@ -228,10 +299,23 @@ async function quitApp() {
 }
 
 async function waitForDashboardReadiness(predicate, label, timeoutMs) {
+  return waitForReadinessPayload("dashboard-ready.json", predicate, label, timeoutMs);
+}
+
+async function waitForExpandedReadiness(predicate, label, timeoutMs) {
+  return waitForReadinessPayload("expanded-ready.json", predicate, label, timeoutMs);
+}
+
+async function readExpandedReadiness() {
+  if (!currentReadinessDir) return null;
+  return readJSONFile(path.join(currentReadinessDir, "expanded-ready.json")).catch(() => null);
+}
+
+async function waitForReadinessPayload(filename, predicate, label, timeoutMs) {
   if (!currentReadinessDir) {
     throw new Error(`No readiness directory for ${label}`);
   }
-  const filePath = path.join(currentReadinessDir, "dashboard-ready.json");
+  const filePath = path.join(currentReadinessDir, filename);
   const deadline = Date.now() + timeoutMs;
   let lastSeen = null;
   while (Date.now() < deadline) {
@@ -273,6 +357,10 @@ async function closePlaywrightSession(spec) {
 }
 
 async function killChromeForPort(port) {
+  return signalChromeForPort(port, "KILL");
+}
+
+async function signalChromeForPort(port, signal) {
   // pgrep parses patterns starting with `--` as flags unless we pass `--` first
   // to terminate option parsing.
   const { stdout } = await run("pgrep", ["-f", "--", `--remote-debugging-port=${port}`], {
@@ -286,7 +374,7 @@ async function killChromeForPort(port) {
     throw new Error(`No Chrome process found for debug port ${port}`);
   }
   for (const pid of pids) {
-    await run("kill", ["-9", pid], { timeout: 5_000 }).catch(() => {});
+    await run("kill", [`-${signal}`, pid], { timeout: 5_000 }).catch(() => {});
   }
   return pids;
 }
