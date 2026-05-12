@@ -13,6 +13,9 @@ struct SmokeLaunchArguments {
   let recordingExportResultURL: URL?
   let readinessDirectory: URL?
   let navigationURL: String?
+  let renameSessionId: String?
+  let renameTo: String?
+  let markSessionClosedId: String?
 
   init(arguments: [String]) {
     self.usesInMemoryStore = arguments.contains("--smoke-in-memory-store")
@@ -41,6 +44,12 @@ struct SmokeLaunchArguments {
       named: "--smoke-readiness-dir", arguments: arguments)
     self.navigationURL = Self.stringArgument(
       named: "--smoke-navigate-url", arguments: arguments)
+    self.renameSessionId = Self.stringArgument(
+      named: "--smoke-rename-session-id", arguments: arguments)
+    self.renameTo = Self.stringArgument(
+      named: "--smoke-rename-to", arguments: arguments)
+    self.markSessionClosedId = Self.stringArgument(
+      named: "--smoke-mark-session-closed-id", arguments: arguments)
   }
 
   private static func stringArgument(named flag: String, arguments: [String]) -> String? {

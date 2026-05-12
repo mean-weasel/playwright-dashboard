@@ -140,8 +140,16 @@ RUN_EXPANDED_FALLBACK_SMOKE=1 make smoke-expanded-fallback
 RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
 RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
+RUN_PLAYWRIGHT_CLI_DASHBOARD_ACTIONS_SMOKE=1 make smoke-playwright-cli-dashboard-actions
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```
+
+The dashboard-actions smoke boots two real `playwright-cli` sessions, launches
+the packaged app with smoke-only launch arguments
+(`--smoke-rename-session-id` / `--smoke-rename-to` and
+`--smoke-mark-session-closed-id` / `--smoke-dashboard-filter-closed`), and
+asserts the resulting `dashboard-ready.json` readiness payload — covering the
+rename round-trip and the closed-history filter without scraping any UI.
 
 To mirror the required CI surface locally with one target, use `make smoke-all`:
 
