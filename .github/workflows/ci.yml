@@ -730,6 +730,60 @@ jobs:
           path: dist/smoke-results.json
           if-no-files-found: ignore
 
+  gui-smoke-playwright-cli-multi-target:
+    name: GUI Smoke Playwright CLI Multi Target
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: [package-check]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-check.result == 'success' &&
+      (github.event_name == 'pull_request' ||
+       github.event_name == 'push' ||
+       github.event_name == 'merge_group' ||
+       github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch')
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Install Playwright CLI
+        run: npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for Playwright CLI multi-target smoke."
+            exit 1
+          fi
+      - name: Check Playwright CLI
+        run: |
+          if ! command -v playwright-cli >/dev/null 2>&1; then
+            echo "::error::playwright-cli is required for Playwright CLI multi-target smoke."
+            exit 1
+          fi
+      - name: Run Playwright CLI multi-target smoke
+        env:
+          RUN_PLAYWRIGHT_CLI_MULTI_TARGET_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-playwright-cli-multi-target-artifacts
+          SMOKE_RETRY_COUNT: "1"
+        run: make smoke-playwright-cli-multi-target
+      - name: Upload Playwright CLI multi-target smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gui-smoke-playwright-cli-multi-target-artifacts
+          path: |
+            dist/gui-smoke-playwright-cli-multi-target-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload Playwright CLI multi-target smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-playwright-cli-multi-target
+          path: dist/smoke-results.json
+          if-no-files-found: ignore
+
   visual-snapshots:
     name: Visual Snapshots
     runs-on: macos-15
@@ -786,6 +840,7 @@ jobs:
       - gui-smoke-safe-mode-observer
       - gui-smoke-playwright-cli-multi-session
       - gui-smoke-playwright-cli-dashboard-actions
+      - gui-smoke-playwright-cli-multi-target
     steps:
       - uses: actions/checkout@v5
       - name: Check required jobs
@@ -801,16 +856,17 @@ jobs:
           SAFE_OBSERVER_RESULT: ${{ needs.gui-smoke-safe-mode-observer.result }}
           CLI_MULTI_RESULT: ${{ needs.gui-smoke-playwright-cli-multi-session.result }}
           CLI_ACTIONS_RESULT: ${{ needs.gui-smoke-playwright-cli-dashboard-actions.result }}
+          CLI_TARGETS_RESULT: ${{ needs.gui-smoke-playwright-cli-multi-target.result }}
           EVENT_NAME: ${{ github.event_name }}
           CODE_CHANGED: ${{ needs.detect-changes.outputs.code }}
         run: |
-          echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Coverage: $COVERAGE_RESULT, Size: $SIZE_RESULT, Mockups: $MOCKUP_RESULT, Package: $PACKAGE_RESULT, Structure: $STRUCTURE_RESULT, Safe observer: $SAFE_OBSERVER_RESULT, CLI multi: $CLI_MULTI_RESULT, CLI actions: $CLI_ACTIONS_RESULT"
+          echo "Lint: $LINT_RESULT, Build: $BUILD_RESULT, Tests: $TEST_RESULT, Coverage: $COVERAGE_RESULT, Size: $SIZE_RESULT, Mockups: $MOCKUP_RESULT, Package: $PACKAGE_RESULT, Structure: $STRUCTURE_RESULT, Safe observer: $SAFE_OBSERVER_RESULT, CLI multi: $CLI_MULTI_RESULT, CLI actions: $CLI_ACTIONS_RESULT, CLI targets: $CLI_TARGETS_RESULT"
           allow_skipped=false
           if [ "$EVENT_NAME" = "pull_request" ] && [ "$CODE_CHANGED" != "true" ]; then
             allow_skipped=true
             echo "Docs-only PR detected; skipped required jobs are allowed."
           fi
-          for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$COVERAGE_RESULT" "$SIZE_RESULT" "$MOCKUP_RESULT" "$PACKAGE_RESULT" "$STRUCTURE_RESULT" "$SAFE_OBSERVER_RESULT" "$CLI_MULTI_RESULT" "$CLI_ACTIONS_RESULT"; do
+          for result in "$LINT_RESULT" "$BUILD_RESULT" "$TEST_RESULT" "$COVERAGE_RESULT" "$SIZE_RESULT" "$MOCKUP_RESULT" "$PACKAGE_RESULT" "$STRUCTURE_RESULT" "$SAFE_OBSERVER_RESULT" "$CLI_MULTI_RESULT" "$CLI_ACTIONS_RESULT" "$CLI_TARGETS_RESULT"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               echo "A required job reported: $result"
               exit 1

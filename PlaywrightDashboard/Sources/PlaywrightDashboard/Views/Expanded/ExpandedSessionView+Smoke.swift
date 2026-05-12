@@ -15,6 +15,8 @@ extension ExpandedSessionView {
       String(describing: targetMonitorMode),
       smokeNavigationResult ?? "",
       smokeNavigationError ?? "",
+      session.selectedTargetId ?? "",
+      String(session.pageTargets.count),
     ].joined(separator: "|")
   }
 

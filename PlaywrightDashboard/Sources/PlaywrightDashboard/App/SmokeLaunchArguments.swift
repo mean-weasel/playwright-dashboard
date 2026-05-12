@@ -23,6 +23,7 @@ struct SmokeLaunchArguments {
   let markSessionStaleId: String?
   let cleanupStaleSessions: Bool
   let searchQuery: String?
+  let selectTargetId: String?
 
   init(arguments: [String]) {
     self.usesInMemoryStore = arguments.contains("--smoke-in-memory-store")
@@ -70,6 +71,8 @@ struct SmokeLaunchArguments {
     self.cleanupStaleSessions = arguments.contains("--smoke-cleanup-stale-sessions")
     self.searchQuery = Self.stringArgument(
       named: "--smoke-search-query", arguments: arguments)
+    self.selectTargetId = Self.stringArgument(
+      named: "--smoke-select-target-id", arguments: arguments)
   }
 
   private static func stringArgument(named flag: String, arguments: [String]) -> String? {
