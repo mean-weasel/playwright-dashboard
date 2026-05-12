@@ -21,10 +21,14 @@ struct PlaywrightDashboardApp: App {
     UserDefaults.standard.register(defaults: DashboardSettings.registrationDefaults())
 
     let smokeArguments = SmokeLaunchArguments(arguments: CommandLine.arguments)
-    let creation =
-      smokeArguments.usesInMemoryStore
-      ? ModelContainerFactory.makeInMemory()
-      : ModelContainerFactory.makeWithDiagnostics()
+    let creation: ModelContainerCreation =
+      if smokeArguments.usesInMemoryStore {
+        ModelContainerFactory.makeInMemory()
+      } else if let storeDirectory = smokeArguments.persistentStorePath {
+        ModelContainerFactory.makeWithCustomStore(at: storeDirectory)
+      } else {
+        ModelContainerFactory.makeWithDiagnostics()
+      }
     let container = creation.container
     let state: AppState
     if let daemonDirectory = smokeArguments.daemonDirectory {

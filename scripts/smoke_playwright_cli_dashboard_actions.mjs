@@ -24,6 +24,7 @@ const tmpRoot = await fsTempDir("playwright-dashboard-actions-smoke-");
 const daemonRoot = path.join(tmpRoot, "daemon");
 const readinessRoot = path.join(tmpRoot, "readiness");
 const workspaceDir = path.join(tmpRoot, "workspace");
+const persistentStoreDir = path.join(tmpRoot, "store");
 const cliEnv = {
   ...process.env,
   PLAYWRIGHT_DAEMON_SESSION_DIR: daemonRoot,
@@ -123,6 +124,55 @@ try {
   await quitApp();
   logProgress("Phase B passed: closed filter + closed session surfaced in readiness payload");
 
+  // Phase C: reorder + persistence-across-relaunch
+  await mkdir(persistentStoreDir, { recursive: true });
+  const [first, second] = specs;
+  logProgress(
+    `Phase C1: reordering ${first.label} <-> ${second.label} against persistent store`,
+  );
+  await launchApp({
+    persistentStorePath: persistentStoreDir,
+    extraArgs: [
+      "--smoke-reorder-source-id",
+      first.sessionId,
+      "--smoke-reorder-target-id",
+      second.sessionId,
+    ],
+  });
+  await waitForDashboardReadiness(
+    (payload) => {
+      const ids = (payload.sessions ?? []).map((session) => session.sessionId);
+      return (
+        payload.safeMode === true
+        && ids.length >= 2
+        && ids[0] === second.sessionId
+        && ids[1] === first.sessionId
+      );
+    },
+    `dashboard reflects reorder (${second.sessionId} before ${first.sessionId})`,
+  );
+  await quitApp();
+  logProgress("Phase C1 passed: reorder applied and reflected in readiness payload");
+
+  logProgress("Phase C2: relaunching against same persistent store to verify persistence");
+  await launchApp({
+    persistentStorePath: persistentStoreDir,
+  });
+  await waitForDashboardReadiness(
+    (payload) => {
+      const ids = (payload.sessions ?? []).map((session) => session.sessionId);
+      return (
+        payload.safeMode === true
+        && ids.length >= 2
+        && ids[0] === second.sessionId
+        && ids[1] === first.sessionId
+      );
+    },
+    `reorder persists across relaunch (${second.sessionId} before ${first.sessionId})`,
+  );
+  await quitApp();
+  logProgress("Phase C2 passed: reorder persisted across relaunch");
+
   logProgress("Playwright CLI dashboard-actions smoke assertions passed");
   console.log("Playwright CLI dashboard-actions smoke passed");
 } catch (error) {
@@ -137,24 +187,27 @@ try {
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
-async function launchApp({ extraArgs = [] } = {}) {
+async function launchApp({ extraArgs = [], persistentStorePath = null } = {}) {
   currentReadinessDir = path.join(readinessRoot, `launch-${++launchIndex}`);
   await rm(currentReadinessDir, { recursive: true, force: true });
   await mkdir(currentReadinessDir, { recursive: true });
-  const appArgs = [
+  const baseArgs = [
     "-n",
     appPath,
     "--args",
     "--smoke-open-dashboard",
     "--smoke-daemon-dir",
     daemonRoot,
-    "--smoke-in-memory-store",
     "--smoke-safe-mode",
     "--smoke-readiness-dir",
     currentReadinessDir,
-    ...extraArgs,
   ];
-  await run("open", appArgs);
+  if (persistentStorePath) {
+    baseArgs.push("--smoke-persistent-store-path", persistentStorePath);
+  } else {
+    baseArgs.push("--smoke-in-memory-store");
+  }
+  await run("open", [...baseArgs, ...extraArgs]);
   appOpened = true;
 }
 

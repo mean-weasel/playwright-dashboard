@@ -16,6 +16,9 @@ struct SmokeLaunchArguments {
   let renameSessionId: String?
   let renameTo: String?
   let markSessionClosedId: String?
+  let reorderSourceId: String?
+  let reorderTargetId: String?
+  let persistentStorePath: URL?
 
   init(arguments: [String]) {
     self.usesInMemoryStore = arguments.contains("--smoke-in-memory-store")
@@ -50,6 +53,12 @@ struct SmokeLaunchArguments {
       named: "--smoke-rename-to", arguments: arguments)
     self.markSessionClosedId = Self.stringArgument(
       named: "--smoke-mark-session-closed-id", arguments: arguments)
+    self.reorderSourceId = Self.stringArgument(
+      named: "--smoke-reorder-source-id", arguments: arguments)
+    self.reorderTargetId = Self.stringArgument(
+      named: "--smoke-reorder-target-id", arguments: arguments)
+    self.persistentStorePath = Self.urlArgument(
+      named: "--smoke-persistent-store-path", arguments: arguments)
   }
 
   private static func stringArgument(named flag: String, arguments: [String]) -> String? {
