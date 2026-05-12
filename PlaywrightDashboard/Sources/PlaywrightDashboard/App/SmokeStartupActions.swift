@@ -22,6 +22,9 @@ enum SmokeStartupActions {
     if let sessionId = arguments.markSessionStaleId, arguments.cleanupStaleSessions {
       pending.append(.markAndCleanupStale(sessionId: sessionId))
     }
+    if let sessionId = arguments.selectedSessionId, let targetId = arguments.selectTargetId {
+      pending.append(.selectTarget(sessionId: sessionId, targetId: targetId))
+    }
     guard !pending.isEmpty else { return }
 
     let deadline = Date().addingTimeInterval(deadlineInterval)
@@ -89,6 +92,13 @@ enum SmokeStartupActions {
         } else {
           unfinished.append(action)
         }
+      case .selectTarget(let sessionId, let targetId):
+        let session = appState.sessions.first(where: { $0.sessionId == sessionId })
+        if let session, session.pageTargets.contains(where: { $0.id == targetId }) {
+          appState.selectTarget(session, targetId: targetId)
+        } else {
+          unfinished.append(action)
+        }
       }
     }
     return unfinished
@@ -100,6 +110,7 @@ enum SmokeStartupActions {
     case reorder(sourceId: String, targetId: String)
     case closeViaDashboard(sessionId: String)
     case markAndCleanupStale(sessionId: String)
+    case selectTarget(sessionId: String, targetId: String)
 
     var description: String {
       switch self {
@@ -108,6 +119,7 @@ enum SmokeStartupActions {
       case .reorder(let source, let target): "reorder(\(source) <-> \(target))"
       case .closeViaDashboard(let id): "closeViaDashboard(\(id))"
       case .markAndCleanupStale(let id): "markAndCleanupStale(\(id))"
+      case .selectTarget(let sid, let tid): "selectTarget(\(sid)/\(tid))"
       }
     }
   }
