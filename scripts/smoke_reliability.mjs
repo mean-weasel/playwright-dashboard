@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -150,12 +150,14 @@ try {
     `dashboard reflects ${specs.restart.sessionId} as closed/missing after CLI close`,
     killSlaMs,
   );
-  logProgress("Closed and reflected; reopening same sessionId");
+  logProgress("Closed and reflected; waiting for socket cleanup before reopening");
+  await waitForSocketCleanup(specs.restart.socketPath);
 
   // Clear cdpPort so we re-read after the new daemon assigns a fresh one.
   const previousPort = specs.restart.debugPort;
   specs.restart.debugPort = 0;
   specs.restart.sessionFile = null;
+  specs.restart.socketPath = null;
   await openPlaywrightSession(specs.restart, specs.restart.server.rootURL);
   await loadRealSessionFile(specs.restart);
   logProgress(
@@ -303,6 +305,21 @@ async function loadRealSessionFile(spec) {
   }
   spec.debugPort = cdpPort;
   spec.sessionFile = sessionFile;
+  spec.socketPath = config.socketPath ?? null;
+}
+
+async function waitForSocketCleanup(socketPath, timeoutMs = 10_000) {
+  if (!socketPath) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await stat(socketPath);
+    } catch {
+      return;
+    }
+    await sleep(200);
+  }
+  await rm(socketPath, { force: true }).catch(() => {});
 }
 
 async function findSessionFile(root, filename) {
