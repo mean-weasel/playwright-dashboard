@@ -25,6 +25,7 @@ on:
           - multi
           - safe-observer
           - cli-multi
+          - many
           - both
           - all
 
@@ -900,6 +901,58 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: smoke-results-playwright-cli-interaction
+          path: dist/smoke-results.json
+          if-no-files-found: ignore
+
+  gui-smoke-many-sessions:
+    name: GUI Smoke Many Sessions Stress
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: [package-check]
+    if: >-
+      always() && !cancelled() &&
+      needs.package-check.result == 'success' &&
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.gui_smoke_mode == 'many' || inputs.gui_smoke_mode == 'all')
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
+      - name: Install Playwright CLI
+        run: npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
+      - name: Check Chrome
+        run: |
+          if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+            echo "::error::Google Chrome is required for many-sessions stress smoke."
+            exit 1
+          fi
+      - name: Check Playwright CLI
+        run: |
+          if ! command -v playwright-cli >/dev/null 2>&1; then
+            echo "::error::playwright-cli is required for many-sessions stress smoke."
+            exit 1
+          fi
+      - name: Run many-sessions stress smoke
+        env:
+          RUN_MANY_SESSION_SMOKE: "1"
+          MANY_SESSION_COUNT: "12"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/gui-smoke-many-sessions-artifacts
+          SMOKE_RETRY_COUNT: "0"
+        run: make smoke-many-sessions
+      - name: Upload many-sessions smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gui-smoke-many-sessions-artifacts
+          path: |
+            dist/gui-smoke-many-sessions-artifacts/**
+            dist/PlaywrightDashboard.zip
+          if-no-files-found: ignore
+      - name: Upload many-sessions smoke results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: smoke-results-many-sessions
           path: dist/smoke-results.json
           if-no-files-found: ignore
 

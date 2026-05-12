@@ -151,6 +151,20 @@ the packaged app with smoke-only launch arguments
 asserts the resulting `dashboard-ready.json` readiness payload — covering the
 rename round-trip and the closed-history filter without scraping any UI.
 
+The many-sessions stress smoke is opt-in (not in `smoke-all` or the required
+CI gate). It boots twelve concurrent `playwright-cli` sessions and verifies
+that the dashboard discovers all of them within an SLA, each session's
+expanded view opens without hanging, closing every session returns the
+dashboard to no-active state within an SLA, and the dashboard process's
+RSS+CPU stay within a reasonable cap. Tunable via `MANY_SESSION_COUNT`,
+`MANY_SESSION_DISCOVERY_SLA_MS`, `MANY_SESSION_CLEANUP_SLA_MS`, and
+`MANY_SESSION_EXPANDED_TIMEOUT_MS`. In CI it runs only via the `many` (or
+`all`) option of the `gui_smoke_mode` workflow_dispatch input.
+
+```sh
+RUN_MANY_SESSION_SMOKE=1 make smoke-many-sessions
+```
+
 To mirror the required CI surface locally with one target, use `make smoke-all`:
 
 ```sh

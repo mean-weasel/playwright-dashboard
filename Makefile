@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-playwright-cli-dashboard-actions smoke-playwright-cli-multi-target smoke-playwright-cli-recording smoke-playwright-cli-interaction smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-playwright-cli-dashboard-actions smoke-playwright-cli-multi-target smoke-playwright-cli-recording smoke-playwright-cli-interaction smoke-many-sessions smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -290,6 +290,15 @@ smoke-playwright-cli-interaction:
 	$(MAKE) check-accessibility
 	$(MAKE) validate-smoke-package
 	scripts/run_smoke_with_retry.mjs --name playwright-cli-interaction -- scripts/smoke_playwright_cli_interaction.mjs
+
+smoke-many-sessions:
+	@if [ "$$RUN_MANY_SESSION_SMOKE" != "1" ]; then \
+		echo "Set RUN_MANY_SESSION_SMOKE=1 to run the many-sessions stress smoke (12 concurrent CLI sessions by default)"; \
+		exit 2; \
+	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-smoke-package
+	scripts/run_smoke_with_retry.mjs --name many-sessions -- scripts/smoke_many_sessions.mjs
 
 smoke-release-launch:
 	@if [ "$$RUN_RELEASE_LAUNCH_SMOKE" != "1" ]; then \
