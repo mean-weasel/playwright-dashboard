@@ -193,10 +193,22 @@ jobs:
             return idx >= 0 ? file.filename.slice(idx + marker.length) : file.filename;
           }
 
+          function baseName(file) {
+            const slash = file.filename.lastIndexOf("/");
+            return slash >= 0 ? file.filename.slice(slash + 1) : file.filename;
+          }
+
+          // Smoke* files in App/ are test-only infrastructure exercised by GUI smokes,
+          // not unit tests. Excluding them from the unit-test coverage aggregate avoids
+          // penalizing PRs that add smoke launch args or fixtures.
+          function isSmokeInfra(file) {
+            return baseName(file).startsWith("Smoke");
+          }
+
           const total = summarize(files);
-          const sourceFiles = files.filter((file) =>
-            file.filename.includes("/PlaywrightDashboard/Sources/"),
-          );
+          const sourceFiles = files
+            .filter((file) => file.filename.includes("/PlaywrightDashboard/Sources/"))
+            .filter((file) => !isSmokeInfra(file));
           const source = summarize(sourceFiles);
           const lowestSourceFiles = sourceFiles
             .map((file) => ({
@@ -249,7 +261,7 @@ jobs:
               `Total lines: ${total.covered}/${total.count} (${total.percent.toFixed(2)}%)`,
               `Source lines: ${source.covered}/${source.count} (${source.percent.toFixed(2)}%)`,
               "",
-              `Source floor: ${sourceFloor}% — per-file floor: ${perFileFloor}% (Services/Models, files ≥ ${perFileMinLines} lines)`,
+              `Source floor: ${sourceFloor}% (excludes \`Smoke*.swift\` test infrastructure) — per-file floor: ${perFileFloor}% (Services/Models, files ≥ ${perFileMinLines} lines)`,
               "",
               "### Lowest Source Files",
               "",
