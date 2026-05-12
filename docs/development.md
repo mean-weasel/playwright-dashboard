@@ -151,6 +151,21 @@ the packaged app with smoke-only launch arguments
 asserts the resulting `dashboard-ready.json` readiness payload — covering the
 rename round-trip and the closed-history filter without scraping any UI.
 
+The reliability smoke covers two of the three failure modes called out in
+`AGENTS.md` — **Chrome killed mid-session** (`kill -9` the daemon-spawned
+Chrome; assert the dashboard reflects the session as closed within an SLA)
+and **browser restart / rediscovery** (close + reopen the same
+`playwright-cli` session id against a single long-lived dashboard launch;
+assert the dashboard rediscovers the new CDP port). The third failure mode,
+**sleep/wake CDP reconnect**, is intentionally deferred: a `macos-15` GitHub
+runner cannot meaningfully simulate sleep (`pmset sleepnow` requires root and
+the runner host does not actually suspend), so the assertion would be
+non-deterministic at best. It remains an open follow-up under #51.
+
+```sh
+RUN_RELIABILITY_SMOKE=1 make smoke-reliability
+```
+
 The many-sessions stress smoke is opt-in (not in `smoke-all` or the required
 CI gate). It boots twelve concurrent `playwright-cli` sessions and verifies
 that the dashboard discovers all of them within an SLA, each session's
