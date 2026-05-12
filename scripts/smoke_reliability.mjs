@@ -20,6 +20,11 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR
   ? path.resolve(process.env.SMOKE_ARTIFACT_DIR)
   : null;
 const killSlaMs = Number.parseInt(process.env.RELIABILITY_KILL_SLA_MS ?? "30000", 10);
+const restartSlaMs = Number.parseInt(process.env.RELIABILITY_RESTART_SLA_MS ?? "60000", 10);
+const teardownSettleMs = Number.parseInt(
+  process.env.RELIABILITY_TEARDOWN_SETTLE_MS ?? "5000",
+  10,
+);
 const accessibilityHelp = staticAccessibilityHelp();
 const tmpRoot = await mkdtemp(
   path.join(os.tmpdir(), "playwright-dashboard-reliability-smoke-"),
@@ -34,13 +39,25 @@ const cliEnv = {
 };
 const smokeId = String(process.pid);
 
-const spec = {
-  slug: "kill",
-  sessionId: `cli-rel-kill-${smokeId}`,
-  label: "Reliability Kill",
-  debugPort: 0,
-  sessionFile: null,
-  server: null,
+const specs = {
+  kill: {
+    slug: "kill",
+    sessionId: `cli-rel-kill-${smokeId}`,
+    label: "Reliability Kill",
+    debugPort: 0,
+    sessionFile: null,
+    socketPath: null,
+    server: null,
+  },
+  restart: {
+    slug: "restart",
+    sessionId: `cli-rel-restart-${smokeId}`,
+    label: "Reliability Restart",
+    debugPort: 0,
+    sessionFile: null,
+    socketPath: null,
+    server: null,
+  },
 };
 
 let appOpened = false;
@@ -58,11 +75,14 @@ try {
   await mkdir(path.join(workspaceDir, ".playwright"), { recursive: true });
   await ensurePlaywrightCLI();
 
-  spec.server = await startSessionServer(spec);
-  logProgress(`Opening kill-target CLI session ${spec.sessionId}`);
-  await openPlaywrightSession(spec, spec.server.rootURL);
-  await loadRealSessionFile(spec);
-  logProgress(`${spec.label} ready on CDP ${spec.debugPort}`);
+  for (const s of Object.values(specs)) {
+    s.server = await startSessionServer(s);
+  }
+
+  logProgress(`Opening kill-target CLI session ${specs.kill.sessionId}`);
+  await openPlaywrightSession(specs.kill, specs.kill.server.rootURL);
+  await loadRealSessionFile(specs.kill);
+  logProgress(`${specs.kill.label} ready on CDP ${specs.kill.debugPort}`);
 
   logProgress("Disabling persisted control mode default");
   await run("defaults", [
@@ -76,30 +96,83 @@ try {
   logProgress("Launching dashboard");
   await launchApp();
 
-  logProgress("Waiting for dashboard to discover kill-target session");
+  logProgress("Phase 1: waiting for dashboard to discover kill-target session");
   await waitForDashboardReadiness(
     (payload) =>
       payload.safeMode === true
       && payload.sessions?.some(
         (session) =>
-          session.sessionId === spec.sessionId && session.status !== "closed",
+          session.sessionId === specs.kill.sessionId && session.status !== "closed",
       ),
-    `dashboard discovers ${spec.sessionId} as active`,
+    `dashboard discovers ${specs.kill.sessionId} as active`,
     60_000,
   );
-  logProgress(`Killing Chrome for ${spec.sessionId} (debug port ${spec.debugPort})`);
-  const killed = await killChromeForPort(spec.debugPort);
+  logProgress(`Killing Chrome for ${specs.kill.sessionId} (debug port ${specs.kill.debugPort})`);
+  const killed = await killChromeForPort(specs.kill.debugPort);
   logProgress(`Killed ${killed.length} Chrome process(es): ${killed.join(", ")}`);
   const killStart = Date.now();
   await waitForDashboardReadiness(
     (payload) => {
-      const session = payload.sessions?.find((s) => s.sessionId === spec.sessionId);
+      const session = payload.sessions?.find((s) => s.sessionId === specs.kill.sessionId);
       return !session || session.status === "closed";
     },
-    `dashboard reflects ${spec.sessionId} as closed/missing after Chrome kill`,
+    `dashboard reflects ${specs.kill.sessionId} as closed/missing after Chrome kill`,
     killSlaMs,
   );
   logProgress(`Phase 1 passed: dashboard reflected kill within ${Date.now() - killStart} ms`);
+
+  // Phase 2 (diagnostic): tear down with SIGKILL + manual rm, then dump
+  // filesystem state at the moment of reopen so we can see exactly what is
+  // blocking the bind() on macos-15.
+  logProgress(`Phase 2: opening restart-target ${specs.restart.sessionId}`);
+  await openPlaywrightSession(specs.restart, specs.restart.server.rootURL);
+  await loadRealSessionFile(specs.restart);
+  logProgress(`${specs.restart.label} ready on CDP ${specs.restart.debugPort}`);
+  await waitForDashboardReadiness(
+    (payload) =>
+      payload.sessions?.some(
+        (session) =>
+          session.sessionId === specs.restart.sessionId && session.status !== "closed",
+      ),
+    `dashboard discovers ${specs.restart.sessionId} as active`,
+    60_000,
+  );
+
+  logProgress(`Tearing down ${specs.restart.sessionId} (SIGKILL + manual cleanup)`);
+  await dumpSocketState("PRE-TEARDOWN", specs.restart);
+  await sigkillDaemonAndCleanup(specs.restart);
+  await dumpSocketState("POST-CLEANUP", specs.restart);
+  logProgress(`Settling ${teardownSettleMs} ms before reopen`);
+  await sleep(teardownSettleMs);
+  await dumpSocketState("POST-SETTLE", specs.restart);
+
+  const previousPort = specs.restart.debugPort;
+  specs.restart.debugPort = 0;
+  specs.restart.sessionFile = null;
+  specs.restart.socketPath = null;
+  try {
+    await openPlaywrightSession(specs.restart, specs.restart.server.rootURL);
+  } catch (error) {
+    await dumpSocketState("REOPEN-FAILURE", specs.restart);
+    throw error;
+  }
+  await loadRealSessionFile(specs.restart);
+  logProgress(
+    `Reopened ${specs.restart.sessionId} on CDP ${specs.restart.debugPort} (was ${previousPort})`,
+  );
+  const restartStart = Date.now();
+  await waitForDashboardReadiness(
+    (payload) =>
+      payload.sessions?.some(
+        (session) =>
+          session.sessionId === specs.restart.sessionId
+          && session.status !== "closed"
+          && session.cdpPort === specs.restart.debugPort,
+      ),
+    `dashboard rediscovers ${specs.restart.sessionId} with new CDP port`,
+    restartSlaMs,
+  );
+  logProgress(`Phase 2 passed: rediscovered within ${Date.now() - restartStart} ms`);
 
   await quitApp();
   logProgress("Reliability smoke assertions passed");
@@ -109,8 +182,10 @@ try {
   throw error;
 } finally {
   await quitApp();
-  await closePlaywrightSession(spec).catch(() => {});
-  spec.server?.close();
+  for (const s of Object.values(specs)) {
+    await closePlaywrightSession(s).catch(() => {});
+    s.server?.close();
+  }
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
@@ -225,6 +300,63 @@ async function loadRealSessionFile(spec) {
   }
   spec.debugPort = cdpPort;
   spec.sessionFile = sessionFile;
+  spec.socketPath = config.socketPath ?? null;
+}
+
+async function sigkillDaemonAndCleanup(spec) {
+  const pattern = `cli-daemon.*${spec.sessionId}`;
+  const { stdout } = await run("pgrep", ["-f", "--", pattern], { timeout: 5_000 }).catch(
+    () => ({ stdout: "" }),
+  );
+  const daemonPids = stdout
+    .trim()
+    .split(/\s+/)
+    .filter((value) => /^\d+$/.test(value));
+  logProgress(`  daemon pids: ${daemonPids.join(", ") || "(none)"}`);
+  for (const pid of daemonPids) {
+    await run("kill", ["-9", pid], { timeout: 5_000 }).catch(() => {});
+  }
+  await killChromeForPort(spec.debugPort).catch(() => {});
+  if (spec.socketPath) {
+    await rm(spec.socketPath, { force: true }).catch(() => {});
+  }
+  if (spec.sessionFile) {
+    await rm(spec.sessionFile, { force: true }).catch(() => {});
+  }
+}
+
+async function dumpSocketState(label, spec) {
+  const lines = [`  [${label}] socketPath: ${spec.socketPath ?? "(unknown)"}`];
+  if (spec.socketPath) {
+    try {
+      const st = await import("node:fs/promises").then((m) => m.stat(spec.socketPath));
+      lines.push(`    file exists: yes, mode=${st.mode.toString(8)}, size=${st.size}`);
+    } catch (error) {
+      lines.push(`    file exists: NO (${error.code || error.message})`);
+    }
+    const socketDir = path.dirname(spec.socketPath);
+    try {
+      const dirEntries = await readdir(socketDir);
+      const related = dirEntries.filter((entry) => entry.includes(spec.sessionId));
+      lines.push(`    matching entries in ${socketDir}: ${related.join(", ") || "(none)"}`);
+    } catch (error) {
+      lines.push(`    socket dir read failed: ${error.message}`);
+    }
+    const { stdout } = await run("lsof", ["--", spec.socketPath], { timeout: 5_000 }).catch(
+      (error) => ({ stdout: `lsof failed: ${error.message}` }),
+    );
+    const lsofTrimmed = stdout.trim();
+    if (lsofTrimmed) {
+      lines.push(`    lsof:\n${lsofTrimmed.split("\n").map((l) => `      ${l}`).join("\n")}`);
+    } else {
+      lines.push("    lsof: (no output)");
+    }
+  }
+  const pgrepDaemon = await run("pgrep", ["-fl", "--", `cli-daemon.*${spec.sessionId}`], {
+    timeout: 3_000,
+  }).catch(() => ({ stdout: "" }));
+  lines.push(`    pgrep cli-daemon.*${spec.sessionId}: ${pgrepDaemon.stdout.trim() || "(none)"}`);
+  for (const line of lines) logProgress(line);
 }
 
 async function findSessionFile(root, filename) {
