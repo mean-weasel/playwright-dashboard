@@ -66,6 +66,37 @@ GitHub Release.
 Use the `Notary Status` workflow with a submission ID when you need to inspect a
 slow or failed Apple notarization outside the release job logs.
 
+### Recovering from a slow notarization
+
+Apple notarization sometimes stays in `In Progress` for hours, even when the
+submission is ultimately accepted. The `Release macOS App` workflow guards
+against losing a valid release candidate in two ways:
+
+1. Right after signing, the workflow uploads the pre-staple
+   `dist/PlaywrightDashboard.zip` plus a `release-metadata.json` sidecar
+   (version, build number, intended artifact name, source run ID) as the
+   `signed-app-prestaple` artifact on the same run. This artifact survives a
+   failed or timed-out notarization step for the 30-day retention window.
+2. When notarization times out without an `Accepted`, `Invalid`, or `Rejected`
+   verdict, the workflow fails with a `Notarization` section in the run
+   summary that includes the submission ID, the source run ID, and explicit
+   recovery instructions. `Invalid` and `Rejected` still fail loudly with the
+   notary log — those are not recoverable by waiting longer.
+
+To recover:
+
+1. Watch `Notary Status` until the original submission reports `Accepted`.
+2. Manually dispatch `Notary Complete` with:
+   - `source_run_id`: the failing release run's ID (from the Recovery section).
+   - `submission_id`: the same submission ID.
+   - `release_tag` (optional): the `v*` tag the original release was for, if any.
+
+`Notary Complete` re-confirms `Accepted`, downloads the pre-staple artifact,
+staples the ticket, re-zips, verifies (Gatekeeper, codesign, launch smoke),
+uploads the final release artifact, and — if a tag was provided — uploads to
+the corresponding GitHub Release. The original signing run does not need to be
+re-run.
+
 ## Session Discovery Model
 
 The app discovers sessions from the Playwright daemon cache:
