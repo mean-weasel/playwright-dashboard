@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +20,6 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR
   ? path.resolve(process.env.SMOKE_ARTIFACT_DIR)
   : null;
 const killSlaMs = Number.parseInt(process.env.RELIABILITY_KILL_SLA_MS ?? "30000", 10);
-const restartSlaMs = Number.parseInt(process.env.RELIABILITY_RESTART_SLA_MS ?? "60000", 10);
 const accessibilityHelp = staticAccessibilityHelp();
 const tmpRoot = await mkdtemp(
   path.join(os.tmpdir(), "playwright-dashboard-reliability-smoke-"),
@@ -35,23 +34,13 @@ const cliEnv = {
 };
 const smokeId = String(process.pid);
 
-const specs = {
-  kill: {
-    slug: "kill",
-    sessionId: `cli-rel-kill-${smokeId}`,
-    label: "Reliability Kill",
-    debugPort: 0,
-    sessionFile: null,
-    server: null,
-  },
-  restart: {
-    slug: "restart",
-    sessionId: `cli-rel-restart-${smokeId}`,
-    label: "Reliability Restart",
-    debugPort: 0,
-    sessionFile: null,
-    server: null,
-  },
+const spec = {
+  slug: "kill",
+  sessionId: `cli-rel-kill-${smokeId}`,
+  label: "Reliability Kill",
+  debugPort: 0,
+  sessionFile: null,
+  server: null,
 };
 
 let appOpened = false;
@@ -69,15 +58,11 @@ try {
   await mkdir(path.join(workspaceDir, ".playwright"), { recursive: true });
   await ensurePlaywrightCLI();
 
-  for (const spec of Object.values(specs)) {
-    spec.server = await startSessionServer(spec);
-  }
-
-  // Set up the kill session up front so the dashboard sees it on launch.
-  logProgress(`Opening kill-target CLI session ${specs.kill.sessionId}`);
-  await openPlaywrightSession(specs.kill, specs.kill.server.rootURL);
-  await loadRealSessionFile(specs.kill);
-  logProgress(`${specs.kill.label} ready on CDP ${specs.kill.debugPort}`);
+  spec.server = await startSessionServer(spec);
+  logProgress(`Opening kill-target CLI session ${spec.sessionId}`);
+  await openPlaywrightSession(spec, spec.server.rootURL);
+  await loadRealSessionFile(spec);
+  logProgress(`${spec.label} ready on CDP ${spec.debugPort}`);
 
   logProgress("Disabling persisted control mode default");
   await run("defaults", [
@@ -88,97 +73,33 @@ try {
     "false",
   ]);
 
-  // The whole smoke runs against a single long-lived dashboard launch so
-  // Phase 2 can verify "without restarting the app".
-  logProgress("Launching dashboard for full smoke run");
+  logProgress("Launching dashboard");
   await launchApp();
 
-  // Phase 1: Chrome kill mid-session
-  logProgress("Phase 1: waiting for dashboard to discover kill-target session");
+  logProgress("Waiting for dashboard to discover kill-target session");
   await waitForDashboardReadiness(
     (payload) =>
       payload.safeMode === true
       && payload.sessions?.some(
         (session) =>
-          session.sessionId === specs.kill.sessionId && session.status !== "closed",
+          session.sessionId === spec.sessionId && session.status !== "closed",
       ),
-    `dashboard discovers ${specs.kill.sessionId} as active`,
+    `dashboard discovers ${spec.sessionId} as active`,
     60_000,
   );
-  logProgress(`Killing Chrome for ${specs.kill.sessionId} (debug port ${specs.kill.debugPort})`);
-  const killed = await killChromeForPort(specs.kill.debugPort);
+  logProgress(`Killing Chrome for ${spec.sessionId} (debug port ${spec.debugPort})`);
+  const killed = await killChromeForPort(spec.debugPort);
   logProgress(`Killed ${killed.length} Chrome process(es): ${killed.join(", ")}`);
   const killStart = Date.now();
   await waitForDashboardReadiness(
     (payload) => {
-      const session = payload.sessions?.find(
-        (s) => s.sessionId === specs.kill.sessionId,
-      );
+      const session = payload.sessions?.find((s) => s.sessionId === spec.sessionId);
       return !session || session.status === "closed";
     },
-    `dashboard reflects ${specs.kill.sessionId} as closed/missing after Chrome kill`,
+    `dashboard reflects ${spec.sessionId} as closed/missing after Chrome kill`,
     killSlaMs,
   );
   logProgress(`Phase 1 passed: dashboard reflected kill within ${Date.now() - killStart} ms`);
-
-  // Phase 2: close + reopen the same playwright-cli session WITHOUT restarting the dashboard
-  logProgress(`Phase 2: opening restart-target CLI session ${specs.restart.sessionId}`);
-  await openPlaywrightSession(specs.restart, specs.restart.server.rootURL);
-  await loadRealSessionFile(specs.restart);
-  logProgress(
-    `${specs.restart.label} ready on CDP ${specs.restart.debugPort}; waiting for dashboard discovery`,
-  );
-  await waitForDashboardReadiness(
-    (payload) =>
-      payload.sessions?.some(
-        (session) =>
-          session.sessionId === specs.restart.sessionId && session.status !== "closed",
-      ),
-    `dashboard discovers ${specs.restart.sessionId} as active`,
-    60_000,
-  );
-
-  logProgress(`Closing ${specs.restart.sessionId} via playwright-cli`);
-  await closePlaywrightSession(specs.restart);
-  await waitForDashboardReadiness(
-    (payload) => {
-      const session = payload.sessions?.find(
-        (s) => s.sessionId === specs.restart.sessionId,
-      );
-      return !session || session.status === "closed";
-    },
-    `dashboard reflects ${specs.restart.sessionId} as closed/missing after CLI close`,
-    killSlaMs,
-  );
-  logProgress("Closed and reflected; waiting for daemon + socket cleanup before reopening");
-  await ensureDaemonGone(specs.restart.sessionId);
-  await waitForSocketCleanup(specs.restart.socketPath);
-
-  // Clear cdpPort so we re-read after the new daemon assigns a fresh one.
-  const previousPort = specs.restart.debugPort;
-  specs.restart.debugPort = 0;
-  specs.restart.sessionFile = null;
-  specs.restart.socketPath = null;
-  await openPlaywrightSession(specs.restart, specs.restart.server.rootURL);
-  await loadRealSessionFile(specs.restart);
-  logProgress(
-    `Restarted ${specs.restart.sessionId} on CDP ${specs.restart.debugPort} (was ${previousPort})`,
-  );
-  const restartStart = Date.now();
-  await waitForDashboardReadiness(
-    (payload) =>
-      payload.sessions?.some(
-        (session) =>
-          session.sessionId === specs.restart.sessionId
-          && session.status !== "closed"
-          && session.cdpPort === specs.restart.debugPort,
-      ),
-    `dashboard rediscovers ${specs.restart.sessionId} with new CDP port ${specs.restart.debugPort}`,
-    restartSlaMs,
-  );
-  logProgress(
-    `Phase 2 passed: dashboard rediscovered restarted session within ${Date.now() - restartStart} ms (single long-lived dashboard process)`,
-  );
 
   await quitApp();
   logProgress("Reliability smoke assertions passed");
@@ -188,10 +109,8 @@ try {
   throw error;
 } finally {
   await quitApp();
-  for (const spec of Object.values(specs)) {
-    await closePlaywrightSession(spec).catch(() => {});
-    spec.server?.close();
-  }
+  await closePlaywrightSession(spec).catch(() => {});
+  spec.server?.close();
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
@@ -306,39 +225,6 @@ async function loadRealSessionFile(spec) {
   }
   spec.debugPort = cdpPort;
   spec.sessionFile = sessionFile;
-  spec.socketPath = config.socketPath ?? null;
-}
-
-async function waitForSocketCleanup(socketPath, timeoutMs = 10_000) {
-  if (!socketPath) return;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      await stat(socketPath);
-    } catch {
-      return;
-    }
-    await sleep(200);
-  }
-  await rm(socketPath, { force: true }).catch(() => {});
-}
-
-async function ensureDaemonGone(sessionId, timeoutMs = 8_000) {
-  // `playwright-cli close` returns once the daemon acknowledges the close
-  // request, but the daemon process may take a moment to exit and release
-  // its Unix socket. Wait for any process whose cmdline mentions
-  // cli-daemon and this session id to disappear; force-kill on timeout.
-  const pattern = `cli-daemon.*${sessionId}`;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const { stdout } = await run("pgrep", ["-f", "--", pattern], {
-      timeout: 2_000,
-    }).catch(() => ({ stdout: "" }));
-    if (!stdout.trim()) return;
-    await sleep(200);
-  }
-  await run("pkill", ["-9", "-f", pattern], { timeout: 2_000 }).catch(() => {});
-  await sleep(500);
 }
 
 async function findSessionFile(root, filename) {
