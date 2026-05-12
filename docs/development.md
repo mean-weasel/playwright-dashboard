@@ -228,7 +228,11 @@ The `coverage` job in `.github/workflows/ci.yml` enforces two floors:
 
 - `SOURCE_COVERAGE_FLOOR` (default `30`): the aggregate line coverage of
   everything under `Sources/PlaywrightDashboard/` must be at least this
-  percentage. If it drops below, the job fails.
+  percentage. If it drops below, the job fails. Files whose basename starts
+  with `Smoke` (test-only fixtures, launch-arg parsers, and readiness
+  reporters exercised by GUI smokes rather than unit tests) are excluded
+  from the aggregate so PRs that add smoke infrastructure don't get
+  penalized for unit-test coverage they wouldn't have anyway.
 - `PER_FILE_COVERAGE_FLOOR` (default `10`): every file under
   `Sources/PlaywrightDashboard/Services/` or `Sources/PlaywrightDashboard/Models/`
   with at least `PER_FILE_FLOOR_MIN_LINES` (default `15`) executable lines must
