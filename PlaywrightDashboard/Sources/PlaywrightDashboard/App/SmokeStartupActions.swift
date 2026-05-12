@@ -16,6 +16,12 @@ enum SmokeStartupActions {
     if let sourceId = arguments.reorderSourceId, let targetId = arguments.reorderTargetId {
       pending.append(.reorder(sourceId: sourceId, targetId: targetId))
     }
+    if let sessionId = arguments.closeSessionId {
+      pending.append(.closeViaDashboard(sessionId: sessionId))
+    }
+    if let sessionId = arguments.markSessionStaleId, arguments.cleanupStaleSessions {
+      pending.append(.markAndCleanupStale(sessionId: sessionId))
+    }
     guard !pending.isEmpty else { return }
 
     let deadline = Date().addingTimeInterval(deadlineInterval)
@@ -69,6 +75,20 @@ enum SmokeStartupActions {
         } else {
           unfinished.append(action)
         }
+      case .closeViaDashboard(let sessionId):
+        if let session = appState.sessions.first(where: { $0.sessionId == sessionId }) {
+          appState.closeAndTerminate(session)
+        } else {
+          unfinished.append(action)
+        }
+      case .markAndCleanupStale(let sessionId):
+        if let session = appState.sessions.first(where: { $0.sessionId == sessionId }) {
+          session.status = .stale
+          appState.saveSessionChanges()
+          appState.closeAndTerminateStaleSessions()
+        } else {
+          unfinished.append(action)
+        }
       }
     }
     return unfinished
@@ -78,12 +98,16 @@ enum SmokeStartupActions {
     case rename(sessionId: String, to: String)
     case markClosed(sessionId: String)
     case reorder(sourceId: String, targetId: String)
+    case closeViaDashboard(sessionId: String)
+    case markAndCleanupStale(sessionId: String)
 
     var description: String {
       switch self {
       case .rename(let id, let name): "rename(\(id) -> \(name))"
       case .markClosed(let id): "markClosed(\(id))"
       case .reorder(let source, let target): "reorder(\(source) <-> \(target))"
+      case .closeViaDashboard(let id): "closeViaDashboard(\(id))"
+      case .markAndCleanupStale(let id): "markAndCleanupStale(\(id))"
       }
     }
   }
