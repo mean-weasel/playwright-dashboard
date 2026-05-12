@@ -52,8 +52,8 @@ extension AppState {
 
   @discardableResult
   func openLatestRelease() -> Bool {
-    guard let url = URL(string: "https://github.com/neonwatty/playwright-dashboard/releases/latest")
-    else {
+    let releasesURL = "https://github.com/mean-weasel/playwright-dashboard/releases/latest"
+    guard let url = URL(string: releasesURL) else {
       lastOpenURLError = "Latest release URL is invalid."
       return false
     }

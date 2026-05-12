@@ -22,7 +22,7 @@ expanded session view backed by CDP screencast or screenshot fallback.
 ## Download
 
 The latest notarized macOS build is available from
-[GitHub Releases](https://github.com/neonwatty/playwright-dashboard/releases/latest).
+[GitHub Releases](https://github.com/mean-weasel/playwright-dashboard/releases/latest).
 
 Download the `PlaywrightDashboard-v<version>-<build>.zip` asset and its
 `.sha256` companion from the latest release.

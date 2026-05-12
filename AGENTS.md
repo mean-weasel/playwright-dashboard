@@ -6,9 +6,21 @@ Playwright Dashboard is a native macOS menu bar app for discovering and observin
 local `playwright-cli` browser sessions. The latest released build is `v0.1.2`,
 signed, notarized, stapled, and verified by CI.
 
-The app is ready for manual dogfooding on real Macs. Treat it as beta-quality:
-safe for observing local sessions with Safe read-only mode enabled, but not yet
-broad production software.
+The required PR check set covers lint, build, unit tests, coverage floor,
+file-size, mockup checks, package validation, structural UI smoke,
+Safe-mode observer smoke, real `playwright-cli` multi-session smoke,
+dashboard-actions smoke (rename / reorder / persistence / close / stale /
+search / closed-history filter), multi-target smoke (tab switching),
+recording smoke (MP4 export against a CLI session), interaction smoke
+(pointer / wheel / keyboard forwarding against a CLI session), and the
+reliability smoke (Chrome kill, browser restart, sleep/wake CDP
+reconnect). Local-only telemetry by design — see
+[`docs/telemetry-policy.md`](docs/telemetry-policy.md).
+
+The app is ready for use on real Macs with the safety boundaries
+documented in [`docs/user-guide.md`](docs/user-guide.md). Safe read-only
+mode is the default and is the right posture for observing sessions
+you don't own.
 
 ## Safety Model
 
@@ -43,7 +55,7 @@ real Playwright/CDP browser session.
 ## Manual Use
 
 Install the current notarized app from:
-<https://github.com/neonwatty/playwright-dashboard/releases/latest>
+<https://github.com/mean-weasel/playwright-dashboard/releases/latest>
 
 Start headed sessions with `playwright-cli`; the app watches
 `~/Library/Caches/ms-playwright/daemon` for nested `*.session` files. Keep Safe

@@ -625,7 +625,7 @@ struct AppStateTests {
     #expect(appState.openLatestRelease())
     #expect(
       opener.urls.map(\.absoluteString) == [
-        "https://github.com/neonwatty/playwright-dashboard/releases/latest"
+        "https://github.com/mean-weasel/playwright-dashboard/releases/latest"
       ])
     #expect(appState.lastOpenURLError == nil)
   }
