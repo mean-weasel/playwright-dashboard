@@ -151,25 +151,30 @@ the packaged app with smoke-only launch arguments
 asserts the resulting `dashboard-ready.json` readiness payload — covering the
 rename round-trip and the closed-history filter without scraping any UI.
 
-The reliability smoke covers the **Chrome killed mid-session** failure mode
-called out in `AGENTS.md`: `kill -9` the daemon-spawned Chrome and assert the
-dashboard reflects the session as closed within `RELIABILITY_KILL_SLA_MS`
-(default 30 s). On CI it consistently lands inside ~1 second.
+The reliability smoke covers two of the three failure modes called out in
+`AGENTS.md`:
 
-The other two failure modes from `#51` are intentionally deferred:
+- **Chrome killed mid-session** (Phase 1) — `kill -9` the daemon-spawned
+  Chrome and assert the dashboard reflects the session as closed within
+  `RELIABILITY_KILL_SLA_MS` (default 30 s).
+- **Browser restart / rediscovery** (Phase 2) — SIGKILL the
+  `playwright-cli` daemon, force-remove its socket and `.session` files,
+  then reopen with the same session id against the same long-lived
+  dashboard launch. Asserts rediscovery within
+  `RELIABILITY_RESTART_SLA_MS` (default 60 s). Note the smoke's session
+  ids are intentionally short (`rk-<pid>` / `rr-<pid>`) so the daemon's
+  socket path stays under macOS's 104-byte `sun_path` limit — longer ids
+  push the path past 104 bytes on `macos-15` runners, the kernel silently
+  truncates the bound path, and the next bind() collides with the
+  truncated file → `EADDRINUSE`. Likely worth filing upstream with
+  `@playwright/cli` so `makeSocketPath` errors out instead of silently
+  producing a too-long path.
 
-- **Browser restart / rediscovery (close + reopen same session id)** — the
-  underlying `playwright-cli` daemon's Unix socket stays bound for a window
-  past the close call, so an immediate reopen of the same session id races
-  `EADDRINUSE`. Multiple cleanup strategies (poll socket file, wait for the
-  daemon process to exit, force `pkill -9`) all hit the same window in CI.
-  This appears to be a playwright-cli plumbing quirk worth investigating
-  upstream rather than papering over in the smoke.
-- **Sleep/wake CDP reconnect** — `macos-15` GitHub runners cannot meaningfully
-  simulate sleep (`pmset sleepnow` needs root; the runner host does not
-  actually suspend). The assertion would be non-deterministic.
-
-Both remain open follow-ups under #51.
+The third failure mode, **sleep/wake CDP reconnect**, is intentionally
+deferred. A `macos-15` GitHub runner cannot meaningfully simulate sleep
+(`pmset sleepnow` needs root and the runner host does not actually
+suspend), so the assertion would be non-deterministic. It remains an
+open follow-up under #51.
 
 ```sh
 RUN_RELIABILITY_SMOKE=1 make smoke-reliability
