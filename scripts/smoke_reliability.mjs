@@ -267,7 +267,9 @@ async function closePlaywrightSession(spec) {
 }
 
 async function killChromeForPort(port) {
-  const { stdout } = await run("pgrep", ["-f", `--remote-debugging-port=${port}`], {
+  // pgrep parses patterns starting with `--` as flags unless we pass `--` first
+  // to terminate option parsing.
+  const { stdout } = await run("pgrep", ["-f", "--", `--remote-debugging-port=${port}`], {
     timeout: 5_000,
   }).catch(() => ({ stdout: "" }));
   const pids = stdout
