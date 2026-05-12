@@ -9,8 +9,9 @@ struct DashboardWindow: View {
   @AppStorage(DashboardSettings.safeModeOnboardingDismissedKey) private
     var safeModeOnboardingDismissed = false
 
-  init(initialFilter: SidebarFilter? = .allOpen) {
+  init(initialFilter: SidebarFilter? = .allOpen, initialSearch: String = "") {
     _selectedFilter = State(initialValue: initialFilter)
+    _searchText = State(initialValue: initialSearch)
   }
 
   var body: some View {
@@ -57,6 +58,9 @@ struct DashboardWindow: View {
     .onChange(of: selectedFilter) {
       reportSmokeDashboardReadiness()
     }
+    .onChange(of: searchText) {
+      reportSmokeDashboardReadiness()
+    }
   }
 
   private var selectedSession: SessionRecord? {
@@ -76,7 +80,8 @@ struct DashboardWindow: View {
     SmokeReadinessReporter.writeDashboard(
       appState: appState,
       safeMode: safeMode,
-      activeFilter: selectedFilter
+      activeFilter: selectedFilter,
+      searchQuery: searchText
     )
   }
 }

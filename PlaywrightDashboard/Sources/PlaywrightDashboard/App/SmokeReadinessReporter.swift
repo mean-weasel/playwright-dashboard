@@ -27,13 +27,15 @@ enum SmokeReadinessReporter {
   static func writeDashboard(
     appState: AppState,
     safeMode: Bool,
-    activeFilter: SidebarFilter?
+    activeFilter: SidebarFilter?,
+    searchQuery: String
   ) {
     guard let directory else { return }
     let payload = DashboardPayload(
       selectedSessionId: appState.selectedSessionId,
       safeMode: safeMode,
       activeFilter: activeFilter.map(\.smokeIdentifier) ?? "none",
+      searchQuery: searchQuery,
       sessions: appState.sessions.map(SessionPayload.init(session:))
     )
     write(payload, named: "dashboard-ready.json", to: directory)
@@ -84,6 +86,7 @@ private struct DashboardPayload: Encodable {
   let selectedSessionId: String?
   let safeMode: Bool
   let activeFilter: String
+  let searchQuery: String
   let sessions: [SessionPayload]
 }
 

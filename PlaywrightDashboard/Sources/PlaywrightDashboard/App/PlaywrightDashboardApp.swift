@@ -21,6 +21,12 @@ struct PlaywrightDashboardApp: App {
     UserDefaults.standard.register(defaults: DashboardSettings.registrationDefaults())
 
     let smokeArguments = SmokeLaunchArguments(arguments: CommandLine.arguments)
+    if let daemonDirectory = smokeArguments.daemonDirectory {
+      // Propagate the smoke daemon dir into our process env so the
+      // SessionTerminator subprocess (playwright-cli close) talks to the same
+      // daemon. `open -n` does not forward env vars from the smoke shell.
+      setenv("PLAYWRIGHT_DAEMON_SESSION_DIR", daemonDirectory.path, 1)
+    }
     let creation: ModelContainerCreation =
       if smokeArguments.usesInMemoryStore {
         ModelContainerFactory.makeInMemory()
@@ -74,7 +80,9 @@ struct PlaywrightDashboardApp: App {
       Self.openSmokeDashboardWindow(
         appState: state,
         modelContainer: container,
-        initialFilter: smokeArguments.dashboardFilter)
+        initialFilter: smokeArguments.dashboardFilter,
+        initialSearch: smokeArguments.searchQuery ?? ""
+      )
     }
     if smokeArguments.opensSettings {
       Self.openSmokeSettingsWindow(appState: state)
@@ -147,28 +155,35 @@ private struct DetachedSessionWindow: View {
 
 extension PlaywrightDashboardApp {
   private var dashboardWindow: some View {
-    DashboardWindow(initialFilter: smokeArguments.dashboardFilter)
-      .environment(appState)
-      .onAppear {
-        appState.isDashboardOpen = true
-        NSApplication.shared.setActivationPolicy(.regular)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-      }
+    DashboardWindow(
+      initialFilter: smokeArguments.dashboardFilter,
+      initialSearch: smokeArguments.searchQuery ?? ""
+    )
+    .environment(appState)
+    .onAppear {
+      appState.isDashboardOpen = true
+      NSApplication.shared.setActivationPolicy(.regular)
+      NSApplication.shared.activate(ignoringOtherApps: true)
+    }
   }
 
   @MainActor
   private static func openSmokeDashboardWindow(
     appState: AppState,
     modelContainer: ModelContainer,
-    initialFilter: SidebarFilter?
+    initialFilter: SidebarFilter?,
+    initialSearch: String
   ) {
     scheduleSmokeWindowOpen {
       makeSmokeProcessForeground()
       appState.isDashboardOpen = true
 
-      let rootView = DashboardWindow(initialFilter: initialFilter)
-        .environment(appState)
-        .modelContainer(modelContainer)
+      let rootView = DashboardWindow(
+        initialFilter: initialFilter,
+        initialSearch: initialSearch
+      )
+      .environment(appState)
+      .modelContainer(modelContainer)
 
       let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700),

@@ -173,6 +173,67 @@ try {
   await quitApp();
   logProgress("Phase C2 passed: reorder persisted across relaunch");
 
+  // Phase D: close-from-dashboard (real daemon round-trip)
+  const closeTarget = specs[0];
+  logProgress(`Phase D: closing ${closeTarget.label} from the dashboard (daemon round-trip)`);
+  await launchApp({
+    safeMode: false,
+    extraArgs: [
+      "--smoke-close-session-id",
+      closeTarget.sessionId,
+    ],
+  });
+  await waitForDashboardReadiness(
+    (payload) =>
+      payload.safeMode === false
+      && payload.sessions?.some(
+        (session) => session.sessionId === closeTarget.sessionId && session.status === "closed",
+      ),
+    `dashboard close-from-dashboard terminates ${closeTarget.sessionId} via daemon`,
+  );
+  await quitApp();
+  logProgress("Phase D passed: close-from-dashboard reached daemon and session is closed");
+
+  // Phase E: stale-cleanup (mark + closeAndTerminateStaleSessions)
+  const staleTarget = specs[1];
+  logProgress(
+    `Phase E: marking ${staleTarget.label} stale and triggering closeAndTerminateStaleSessions`,
+  );
+  await launchApp({
+    safeMode: false,
+    extraArgs: [
+      "--smoke-mark-session-stale-id",
+      staleTarget.sessionId,
+      "--smoke-cleanup-stale-sessions",
+    ],
+  });
+  await waitForDashboardReadiness(
+    (payload) =>
+      payload.safeMode === false
+      && payload.sessions?.some(
+        (session) => session.sessionId === staleTarget.sessionId && session.status === "closed",
+      ),
+    `dashboard stale-cleanup terminates ${staleTarget.sessionId}`,
+  );
+  await quitApp();
+  logProgress("Phase E passed: stale session cleaned up via dashboard");
+
+  // Phase F: search query wiring
+  const query = "actions-query";
+  logProgress(`Phase F: dashboard search box pre-populated with "${query}"`);
+  await launchApp({
+    extraArgs: [
+      "--smoke-search-query",
+      query,
+    ],
+  });
+  await waitForDashboardReadiness(
+    (payload) => payload.safeMode === true && payload.searchQuery === query,
+    `dashboard surfaces search query "${query}" in readiness payload`,
+  );
+  await quitApp();
+  logProgress("Phase F passed: search query wired through to readiness payload");
+
   logProgress("Playwright CLI dashboard-actions smoke assertions passed");
   console.log("Playwright CLI dashboard-actions smoke passed");
 } catch (error) {
@@ -187,7 +248,11 @@ try {
   await rm(tmpRoot, { recursive: true, force: true });
 }
 
-async function launchApp({ extraArgs = [], persistentStorePath = null } = {}) {
+async function launchApp({
+  extraArgs = [],
+  persistentStorePath = null,
+  safeMode = true,
+} = {}) {
   currentReadinessDir = path.join(readinessRoot, `launch-${++launchIndex}`);
   await rm(currentReadinessDir, { recursive: true, force: true });
   await mkdir(currentReadinessDir, { recursive: true });
@@ -198,7 +263,7 @@ async function launchApp({ extraArgs = [], persistentStorePath = null } = {}) {
     "--smoke-open-dashboard",
     "--smoke-daemon-dir",
     daemonRoot,
-    "--smoke-safe-mode",
+    safeMode ? "--smoke-safe-mode" : "--smoke-disable-safe-mode",
     "--smoke-readiness-dir",
     currentReadinessDir,
   ];
