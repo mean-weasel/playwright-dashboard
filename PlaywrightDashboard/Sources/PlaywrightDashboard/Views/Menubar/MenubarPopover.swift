@@ -241,6 +241,18 @@ struct MenubarPopover: View {
       .controlSize(.small)
 
       Button {
+        _ = appState.openLatestRelease()
+      } label: {
+        Image(systemName: "arrow.down.circle")
+          .font(.subheadline)
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      .help("Check for updates on GitHub Releases")
+      .accessibilityLabel("Check for updates")
+      .accessibilityIdentifier("menubar-check-for-updates")
+
+      Button {
         NSApplication.shared.terminate(nil)
       } label: {
         Image(systemName: "power")

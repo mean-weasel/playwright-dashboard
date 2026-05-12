@@ -1,9 +1,14 @@
 # Playwright Dashboard Beta Testing
 
+For a user-oriented walkthrough of Safe vs Control mode, common
+workflows, and troubleshooting, see [`docs/user-guide.md`](docs/user-guide.md).
+For the project's no-telemetry stance, see
+[`docs/telemetry-policy.md`](docs/telemetry-policy.md).
+
 ## Install
 
 1. Download the latest notarized zip from
-   <https://github.com/neonwatty/playwright-dashboard/releases/latest>.
+   <https://github.com/mean-weasel/playwright-dashboard/releases/latest>.
 2. Unzip `PlaywrightDashboard-v<version>-<build>.zip`.
 3. Move `PlaywrightDashboard.app` to `~/Applications`.
 4. Open the app. macOS should report it as a notarized Developer ID app.
