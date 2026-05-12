@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-playwright-cli-dashboard-actions smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -256,6 +256,15 @@ smoke-playwright-cli-multi-session:
 	$(MAKE) validate-smoke-package
 	scripts/run_smoke_with_retry.mjs --name playwright-cli-multi-session -- scripts/smoke_playwright_cli_multi_session.mjs
 
+smoke-playwright-cli-dashboard-actions:
+	@if [ "$$RUN_PLAYWRIGHT_CLI_DASHBOARD_ACTIONS_SMOKE" != "1" ] && [ "$$RUN_ALL_SMOKES" != "1" ]; then \
+		echo "Set RUN_PLAYWRIGHT_CLI_DASHBOARD_ACTIONS_SMOKE=1 (or RUN_ALL_SMOKES=1) to run the real Playwright CLI dashboard-actions smoke test"; \
+		exit 2; \
+	fi
+	$(MAKE) check-accessibility
+	$(MAKE) validate-smoke-package
+	scripts/run_smoke_with_retry.mjs --name playwright-cli-dashboard-actions -- scripts/smoke_playwright_cli_dashboard_actions.mjs
+
 smoke-release-launch:
 	@if [ "$$RUN_RELEASE_LAUNCH_SMOKE" != "1" ]; then \
 		echo "Set RUN_RELEASE_LAUNCH_SMOKE=1 to launch-check a packaged macOS app"; \
@@ -273,6 +282,7 @@ smoke-all:
 		echo "  4. make visual-structure-smoke (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1)"; \
 		echo "  5. make smoke-safe-mode-observer (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1)"; \
 		echo "  6. make smoke-playwright-cli-multi-session (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1)"; \
+		echo "  7. make smoke-playwright-cli-dashboard-actions (SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1)"; \
 		exit 0; \
 	fi; \
 	$(MAKE) check-accessibility; \
@@ -281,6 +291,7 @@ smoke-all:
 	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 visual-structure-smoke; \
 	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-safe-mode-observer; \
 	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-playwright-cli-multi-session; \
+	$(MAKE) SKIP_ACCESSIBILITY_CHECK=1 SMOKE_REUSE_PACKAGE=1 RUN_ALL_SMOKES=1 smoke-playwright-cli-dashboard-actions; \
 	echo "smoke-all: OK"
 
 smoke-all-extended:

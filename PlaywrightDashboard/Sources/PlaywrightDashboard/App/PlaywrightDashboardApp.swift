@@ -76,6 +76,7 @@ struct PlaywrightDashboardApp: App {
       Self.openSmokeSettingsWindow(appState: state)
     }
     SmokeRecordingExportRunner.startIfNeeded(arguments: smokeArguments, appState: state)
+    SmokeStartupActions.start(arguments: smokeArguments, appState: state)
   }
 
   var body: some Scene {

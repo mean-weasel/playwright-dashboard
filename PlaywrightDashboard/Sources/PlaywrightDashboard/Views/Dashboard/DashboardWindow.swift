@@ -54,6 +54,9 @@ struct DashboardWindow: View {
     .onChange(of: dashboardReadinessSignature) {
       reportSmokeDashboardReadiness()
     }
+    .onChange(of: selectedFilter) {
+      reportSmokeDashboardReadiness()
+    }
   }
 
   private var selectedSession: SessionRecord? {
@@ -70,6 +73,10 @@ struct DashboardWindow: View {
   }
 
   private func reportSmokeDashboardReadiness() {
-    SmokeReadinessReporter.writeDashboard(appState: appState, safeMode: safeMode)
+    SmokeReadinessReporter.writeDashboard(
+      appState: appState,
+      safeMode: safeMode,
+      activeFilter: selectedFilter
+    )
   }
 }
