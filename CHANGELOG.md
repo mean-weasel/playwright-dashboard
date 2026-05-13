@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.3 - 2026-05-12
+
+- Documented the no-telemetry stance in `docs/telemetry-policy.md` and added a
+  user-facing walkthrough in `docs/user-guide.md`.
+- Menu bar popover gains a Check for Updates affordance that opens the GitHub
+  Releases page in the user's default browser.
+- SessionFileScanner skips symbolic links before reading daemon session files,
+  hardening the watcher against malicious symlink injection.
+- Periodic session sync now runs as a single tracked Task with an immediate
+  first iteration; persistence-recovery work is tracked and replaces in-flight
+  retries on each save failure.
+- DaemonWatcher uses a generation counter so off-MainActor timer and FSEvents
+  hops bail out when `stop()` has been called.
+- Catastrophic SwiftData initialization failures (persistent store and
+  in-memory fallback both failing) now surface via NSAlert and exit cleanly
+  instead of `fatalError`. Removes the only `fatalError` in `Sources/`.
+- CDPPageConnection logs swallowed `Page.stopScreencast` errors during
+  teardown instead of bare `try?`.
+
 ## 0.1.2 - 2026-05-09
 
 - GUI smoke tests now use app-emitted readiness artifacts instead of fragile
