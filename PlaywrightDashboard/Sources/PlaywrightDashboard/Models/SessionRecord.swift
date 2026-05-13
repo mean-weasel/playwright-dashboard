@@ -157,6 +157,7 @@ final class SessionRecord {
     guard status != .closed else { return }
 
     let didChangeContent = result.url != lastURL || result.title != lastTitle
+    let derivedStatus = Self.deriveStatus(from: result.url)
     lastScreenshot = result.jpeg
     lastURL = result.url
     lastTitle = result.title
@@ -166,12 +167,12 @@ final class SessionRecord {
     if let targetId = result.targetId {
       selectedTargetId = targetId
     }
-    if didChangeContent {
+    if didChangeContent || derivedStatus == .active {
       lastActivityAt = Date()
     }
 
     guard status != .closing && status != .closeFailed else { return }
-    status = Self.deriveStatus(from: result.url)
+    status = derivedStatus
   }
 
   /// Marks an active or idle session as stale when it has been inactive past `threshold`.

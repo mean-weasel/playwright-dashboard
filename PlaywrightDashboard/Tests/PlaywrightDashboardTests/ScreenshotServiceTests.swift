@@ -90,6 +90,32 @@ struct ScreenshotServiceTests {
     #expect(fixture.saveCounter.count == 1)
   }
 
+  @Test("successful active capture keeps session from becoming stale")
+  func successfulActiveCaptureKeepsSessionCurrent() async throws {
+    let oldActivity = Date().addingTimeInterval(-120)
+    let fixture = try await makeFixture(
+      portsBySessionId: ["active": 9322],
+      outcomesByPort: [
+        9322: .success(jpeg: Data([0x01]), url: "https://example.com", title: "Example Domain")
+      ],
+      staleThreshold: 60
+    )
+    defer { fixture.appState.stopSync() }
+    let session = try #require(fixture.session("active"))
+    session.status = .active
+    session.lastURL = "https://example.com"
+    session.lastTitle = "Example Domain"
+    session.lastActivityAt = oldActivity
+
+    await fixture.service.captureAll(appState: fixture.appState)
+
+    #expect(await fixture.recorder.capturedPorts() == [9322])
+    #expect(session.status == .active)
+    #expect(session.lastActivityAt > oldActivity)
+    #expect(session.lastScreenshot == Data([0x01]))
+    #expect(fixture.saveCounter.count == 1)
+  }
+
   @Test("ignores closed and closing sessions")
   func ignoresClosedAndClosingSessions() async throws {
     let fixture = try await makeFixture(
