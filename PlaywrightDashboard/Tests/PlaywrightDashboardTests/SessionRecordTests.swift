@@ -93,8 +93,8 @@ struct ScreenshotUpdateTests {
     #expect(session.lastTitle == nil)
   }
 
-  @Test("unchanged screenshot metadata does not refresh activity")
-  func unchangedScreenshotDoesNotRefreshActivity() {
+  @Test("unchanged active screenshot metadata refreshes activity")
+  func unchangedActiveScreenshotRefreshesActivity() {
     let oldActivity = Date().addingTimeInterval(-600)
     let session = SessionRecord(
       sessionId: "idle-session",
@@ -115,9 +115,36 @@ struct ScreenshotUpdateTests {
 
     session.updateFromScreenshot(result)
 
-    #expect(session.lastActivityAt == oldActivity)
+    #expect(session.lastActivityAt > oldActivity)
     #expect(session.lastScreenshot == Data([0x01, 0x02]))
     #expect(session.status == .active)
+  }
+
+  @Test("unchanged idle screenshot metadata does not refresh activity")
+  func unchangedIdleScreenshotDoesNotRefreshActivity() {
+    let oldActivity = Date().addingTimeInterval(-600)
+    let session = SessionRecord(
+      sessionId: "idle-session",
+      autoLabel: "Idle",
+      workspaceDir: "/tmp/app",
+      cdpPort: 9222,
+      socketPath: "/tmp/app.sock",
+      status: .idle,
+      lastURL: "about:blank",
+      lastTitle: "",
+      lastActivityAt: oldActivity
+    )
+    let result = CDPClient.ScreenshotResult(
+      jpeg: Data([0x01, 0x02]),
+      url: "about:blank",
+      title: ""
+    )
+
+    session.updateFromScreenshot(result)
+
+    #expect(session.lastActivityAt == oldActivity)
+    #expect(session.lastScreenshot == Data([0x01, 0x02]))
+    #expect(session.status == .idle)
   }
 
   @Test("changed screenshot metadata refreshes activity")
