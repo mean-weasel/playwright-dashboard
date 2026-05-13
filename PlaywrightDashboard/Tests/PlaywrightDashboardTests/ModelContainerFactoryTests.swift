@@ -12,7 +12,7 @@ struct ModelContainerFactoryTests {
   func fallsBackToInMemoryContainer() throws {
     var didUseFallback = false
 
-    let creation = ModelContainerFactory.make(
+    let creation = try ModelContainerFactory.make(
       persistent: {
         throw TestError.persistentFailed
       },
@@ -43,7 +43,7 @@ struct ModelContainerFactoryTests {
   func reportsPersistentContainerUsage() throws {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
 
-    let creation = ModelContainerFactory.make(
+    let creation = try ModelContainerFactory.make(
       persistent: {
         try ModelContainer(for: SessionRecord.self, configurations: configuration)
       },
@@ -58,13 +58,27 @@ struct ModelContainerFactoryTests {
     #expect(ModelContainerFactory.lastCreationUsedFallback == false)
   }
 
+  @Test("Throws when both persistent and fallback fail")
+  func throwsWhenBothPersistentAndFallbackFail() {
+    #expect(throws: ModelContainerInitFailure.self) {
+      _ = try ModelContainerFactory.make(
+        persistent: { throw TestError.persistentFailed },
+        fallback: { throw TestError.fallbackFailed }
+      )
+    }
+    #expect(ModelContainerFactory.lastCreationUsedFallback == false)
+  }
+
   private enum TestError: LocalizedError {
     case persistentFailed
+    case fallbackFailed
 
     var errorDescription: String? {
       switch self {
       case .persistentFailed:
         return "persistentFailed"
+      case .fallbackFailed:
+        return "fallbackFailed"
       }
     }
   }

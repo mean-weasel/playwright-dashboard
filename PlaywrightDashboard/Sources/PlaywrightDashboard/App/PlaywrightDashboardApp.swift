@@ -27,14 +27,19 @@ struct PlaywrightDashboardApp: App {
       // daemon. `open -n` does not forward env vars from the smoke shell.
       setenv("PLAYWRIGHT_DAEMON_SESSION_DIR", daemonDirectory.path, 1)
     }
-    let creation: ModelContainerCreation =
-      if smokeArguments.usesInMemoryStore {
-        ModelContainerFactory.makeInMemory()
-      } else if let storeDirectory = smokeArguments.persistentStorePath {
-        ModelContainerFactory.makeWithCustomStore(at: storeDirectory)
-      } else {
-        ModelContainerFactory.makeWithDiagnostics()
-      }
+    let creation: ModelContainerCreation
+    do {
+      creation =
+        if smokeArguments.usesInMemoryStore {
+          try ModelContainerFactory.makeInMemory()
+        } else if let storeDirectory = smokeArguments.persistentStorePath {
+          try ModelContainerFactory.makeWithCustomStore(at: storeDirectory)
+        } else {
+          try ModelContainerFactory.makeWithDiagnostics()
+        }
+    } catch {
+      Self.presentFatalStartupFailure(error: error)
+    }
     let container = creation.container
     let state: AppState
     if let daemonDirectory = smokeArguments.daemonDirectory {
@@ -235,6 +240,18 @@ extension PlaywrightDashboardApp {
       NSApplication.shared.activate(ignoringOtherApps: true)
       smokeSettingsWindow = window
     }
+  }
+
+  @MainActor
+  static func presentFatalStartupFailure(error: Error) -> Never {
+    let alert = NSAlert()
+    alert.alertStyle = .critical
+    alert.messageText = "Playwright Dashboard could not start"
+    alert.informativeText =
+      (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    alert.addButton(withTitle: "Quit")
+    alert.runModal()
+    exit(EXIT_FAILURE)
   }
 
   @MainActor

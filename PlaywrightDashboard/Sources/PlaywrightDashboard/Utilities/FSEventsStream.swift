@@ -30,7 +30,27 @@ final class FSEventsStream: Sendable {
   private let handler: Handler
   private let queue: DispatchQueue
 
-  // Mutable state protected by the queue
+  // Mutable state protected by `queue`.
+  //
+  // ISOLATION INVARIANT — every read and write of these four fields must
+  // happen on `queue`, which is a serial DispatchQueue. The serial queue is
+  // the only synchronization mechanism here, so `nonisolated(unsafe)` is
+  // sound only as long as that invariant holds.
+  //
+  // Touch points and why they are queue-serialized:
+  //  * `start()` / `stop()` — both schedule their work via `queue.async`.
+  //  * `createStream()` / `stopInternal()` — called only from inside those
+  //    queue-serialized blocks.
+  //  * `handleRawEvents(_:)` — called from the FSEvents C callback after
+  //    `FSEventStreamSetDispatchQueue(_, queue)`, which guarantees callbacks
+  //    are delivered on `queue`.
+  //  * `deinit` — runs after all owning references are released. By that
+  //    point no callback can fire (the stream is invalidated), so reading
+  //    `isRunning` here is safe.
+  //
+  // If you add a new touch point, route it through `queue.async` or you
+  // will introduce silent data races. Do not call these fields from
+  // arbitrary threads.
   private nonisolated(unsafe) var stream: FSEventStreamRef?
   private nonisolated(unsafe) var debounceWork: DispatchWorkItem?
   private nonisolated(unsafe) var pendingEvents: [Event] = []

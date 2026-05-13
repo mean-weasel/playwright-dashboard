@@ -35,6 +35,17 @@ actor SessionFileScanner {
 
     for url in fileURLs.prefix(maxFilesPerScan) {
       do {
+        if try isSymbolicLink(url) {
+          let message = "Skipped session file: symbolic links are not followed"
+          sessionFileScannerLogger.debug(
+            "Skipping session file \(url.lastPathComponent): \(message)"
+          )
+          errors[url.lastPathComponent] = message
+          skippedFiles[url.lastPathComponent] = message
+          unresolvedSessionIds.insert(sessionIdCandidate(for: url))
+          continue
+        }
+
         if let fileSize = try sessionFileSize(url), fileSize > maxSessionFileBytes {
           let message =
             "Skipped session file: file size \(fileSize) bytes exceeds limit of \(maxSessionFileBytes) bytes"
@@ -82,6 +93,11 @@ actor SessionFileScanner {
   private func sessionFileSize(_ url: URL) throws -> Int? {
     let values = try url.resourceValues(forKeys: [.fileSizeKey])
     return values.fileSize
+  }
+
+  private func isSymbolicLink(_ url: URL) throws -> Bool {
+    let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey])
+    return values.isSymbolicLink == true
   }
 
   private func sessionIdCandidate(for url: URL) -> String {
