@@ -143,6 +143,7 @@ try {
   await quitApp();
 
   logProgress(`Switching ${controlled.label} to Control mode`);
+  const controlAttemptStartedAt = Date.now();
   await launchApp(controlled.sessionId);
   await waitForExpandedReadiness({
     sessionId: controlled.sessionId,
@@ -181,10 +182,11 @@ try {
   }
 
   for (const spec of untouched) {
-    if (spec.events.some((event) => event.path === "/next")) {
+    const controlEvents = spec.events.filter((event) => event.at >= controlAttemptStartedAt);
+    if (controlEvents.some((event) => event.path === "/next")) {
       throw new Error(`${spec.label} unexpectedly received navigation to /next`);
     }
-    if (spec.events.some((event) => event.type === "click" || event.type === "wheel")) {
+    if (controlEvents.some((event) => event.type === "click" || event.type === "wheel")) {
       throw new Error(`${spec.label} unexpectedly received forwarded input`);
     }
   }
