@@ -143,15 +143,21 @@ try {
   await quitApp();
 
   logProgress(`Switching ${controlled.label} to Control mode`);
-  await setExpandedInteractionEnabled(true);
-  await launchApp(controlled.sessionId, false, controlled.server.nextURL);
+  await launchApp(controlled.sessionId);
+  await waitForExpandedReadiness({
+    sessionId: controlled.sessionId,
+    safeMode: true,
+    interactionEnabled: false,
+    navigationEnabled: false,
+  });
+  await runAppleScript(enableControlModeScript());
   await waitForExpandedReadiness({
     sessionId: controlled.sessionId,
     safeMode: false,
     interactionEnabled: true,
     navigationEnabled: true,
-    navigationResult: controlled.server.nextURL,
   });
+  await runAppleScript(attemptEnabledNavigationScript(controlled.server.nextURL));
   await waitForEvent(
     controlled,
     (event) => event.path === "/next",
@@ -622,9 +628,12 @@ on waitForNamedElement(processName, elementName, maxAttempts)
           try
             if (name of itemRef as string) is elementName then return itemRef
           end try
-          try
-            if (value of attribute "AXIdentifier" of itemRef as string) is elementName then return itemRef
-          end try
+        try
+          if (value of attribute "AXIdentifier" of itemRef as string) is elementName then return itemRef
+        end try
+        try
+          if (description of itemRef as string) is elementName then return itemRef
+        end try
         end repeat
       end tell
     end tell
@@ -647,10 +656,14 @@ on waitForFirstNamedElement(processName, firstElementName, secondElementName, ma
             set itemName to name of itemRef as string
             if itemName is firstElementName or itemName is secondElementName then return itemRef
           end try
-          try
-            set itemIdentifier to value of attribute "AXIdentifier" of itemRef as string
-            if itemIdentifier is firstElementName or itemIdentifier is secondElementName then return itemRef
-          end try
+        try
+          set itemIdentifier to value of attribute "AXIdentifier" of itemRef as string
+          if itemIdentifier is firstElementName or itemIdentifier is secondElementName then return itemRef
+        end try
+        try
+          set itemDescription to description of itemRef as string
+          if itemDescription is firstElementName or itemDescription is secondElementName then return itemRef
+        end try
         end repeat
       end tell
     end tell
@@ -673,6 +686,9 @@ on elementExists(processName, elementName)
         end try
         try
           if (value of attribute "AXIdentifier" of itemRef as string) is elementName then return true
+        end try
+        try
+          if (description of itemRef as string) is elementName then return true
         end try
       end repeat
     end tell

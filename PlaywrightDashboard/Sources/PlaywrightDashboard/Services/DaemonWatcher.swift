@@ -57,20 +57,17 @@ final class DaemonWatcher {
 
   /// Polls every 2 seconds waiting for the daemon directory to appear.
   private func waitForDirectory(path: String) {
-    let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+    let timer = DispatchSource.makeTimerSource(queue: .main)
     timer.schedule(deadline: .now(), repeating: .seconds(2))
     let startGeneration = generation
     timer.setEventHandler { [weak self] in
-      guard let self else { return }
+      guard let self, self.generation == startGeneration else { return }
       let directoryExists = FileManager.default.fileExists(atPath: path)
       guard directoryExists else { return }
-      Task { @MainActor [weak self] in
-        guard let self, self.generation == startGeneration else { return }
-        self.directoryCheckTimer?.cancel()
-        self.directoryCheckTimer = nil
-        if self.stream == nil {
-          self.startWatching(path: path)
-        }
+      self.directoryCheckTimer?.cancel()
+      self.directoryCheckTimer = nil
+      if self.stream == nil {
+        self.startWatching(path: path)
       }
     }
     directoryCheckTimer = timer
@@ -85,7 +82,6 @@ final class DaemonWatcher {
     let startGeneration = generation
     let fsStream = FSEventsStream(path: path, debounceInterval: 0.5) { [weak self] _ in
       // Events arrived (already debounced) — rescan the directory
-      guard let self else { return }
       Task { @MainActor [weak self] in
         guard let self, self.generation == startGeneration else { return }
         self.scanSessionFiles()
