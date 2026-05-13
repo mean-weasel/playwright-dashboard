@@ -24,6 +24,10 @@ final class DaemonWatcher {
   private var stream: FSEventsStream?
   private var directoryCheckTimer: DispatchSourceTimer?
   private let fileManager = FileManager.default
+  // Generation counter incremented by `stop()`. The off-MainActor timer and
+  // FSEvents callbacks hop to MainActor and check the captured generation
+  // before doing work, so a `stop()` racing with a pending hop drops the hop.
+  private var generation: Int = 0
 
   init(daemonDirectory: URL = DaemonWatcher.daemonDirectory) {
     self.daemonDirectory = daemonDirectory
@@ -42,6 +46,7 @@ final class DaemonWatcher {
 
   /// Stop watching and clean up.
   func stop() {
+    generation &+= 1
     stream?.stop()
     stream = nil
     directoryCheckTimer?.cancel()
@@ -54,11 +59,13 @@ final class DaemonWatcher {
   private func waitForDirectory(path: String) {
     let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
     timer.schedule(deadline: .now(), repeating: .seconds(2))
+    let startGeneration = generation
     timer.setEventHandler { [weak self] in
       guard let self else { return }
       let directoryExists = FileManager.default.fileExists(atPath: path)
       guard directoryExists else { return }
-      Task { @MainActor in
+      Task { @MainActor [weak self] in
+        guard let self, self.generation == startGeneration else { return }
         self.directoryCheckTimer?.cancel()
         self.directoryCheckTimer = nil
         if self.stream == nil {
@@ -75,10 +82,12 @@ final class DaemonWatcher {
     scanSessionFiles()
 
     // Start FSEvents stream
+    let startGeneration = generation
     let fsStream = FSEventsStream(path: path, debounceInterval: 0.5) { [weak self] _ in
       // Events arrived (already debounced) — rescan the directory
       guard let self else { return }
-      Task { @MainActor in
+      Task { @MainActor [weak self] in
+        guard let self, self.generation == startGeneration else { return }
         self.scanSessionFiles()
       }
     }

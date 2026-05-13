@@ -39,6 +39,7 @@ final class AppState {
   private var sessionManager: SessionManager?
   let screenshotService = ScreenshotService()
   private var syncTask: Task<Void, Never>?
+  private var recoveryTask: Task<Void, Never>?
   private var modelContext: ModelContext?
 
   init() {
@@ -130,18 +131,17 @@ final class AppState {
     }
 
     // Kick off a periodic sync loop that reconciles watcher -> SwiftData -> sessions.
+    // First iteration runs immediately so the initial state is populated before
+    // the first sleep; subsequent iterations wait `syncInterval`.
     if shouldStartPeriodicSync {
-      Task { [weak self] in
-        await self?.performSync()
-      }
+      let interval = syncInterval
       syncTask = Task { [weak self] in
+        await self?.performSync()
         while !Task.isCancelled {
           do {
-            guard let self else { return }
-            try await Task.sleep(for: self.syncInterval)
+            try await Task.sleep(for: interval)
           } catch { break }
-          guard let self else { return }
-          await self.performSync()
+          await self?.performSync()
         }
       }
     }
@@ -151,6 +151,8 @@ final class AppState {
   func stopSync() {
     syncTask?.cancel()
     syncTask = nil
+    recoveryTask?.cancel()
+    recoveryTask = nil
     sessionManager = nil
     modelContext = nil
     screenshotService.stop()
@@ -241,7 +243,9 @@ final class AppState {
     } catch {
       lastPersistenceSaveError = error.localizedDescription
       modelContext?.rollback()
-      Task { [weak self] in
+      // Replace any in-flight recovery; only the latest reconciliation matters.
+      recoveryTask?.cancel()
+      recoveryTask = Task { [weak self] in
         await self?.performSync()
       }
     }

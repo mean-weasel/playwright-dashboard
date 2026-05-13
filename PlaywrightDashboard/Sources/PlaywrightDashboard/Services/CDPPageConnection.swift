@@ -1,4 +1,8 @@
 import Foundation
+import OSLog
+
+private let cdpPageConnectionLogger = Logger(
+  subsystem: "PlaywrightDashboard", category: "CDPPageConnection")
 
 actor CDPPageConnection {
   private let port: Int
@@ -98,7 +102,13 @@ actor CDPPageConnection {
   func close() async {
     guard !isClosed else { return }
     isClosed = true
-    try? await sendCommand(method: "Page.stopScreencast", params: [:])
+    do {
+      try await sendCommand(method: "Page.stopScreencast", params: [:])
+    } catch {
+      cdpPageConnectionLogger.debug(
+        "Page.stopScreencast failed during teardown: \(error.localizedDescription)"
+      )
+    }
     receiveTask?.cancel()
     receiveTask = nil
     webSocket?.cancel(with: .normalClosure, reason: nil)
