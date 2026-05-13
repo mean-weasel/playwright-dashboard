@@ -63,6 +63,28 @@ struct DaemonWatcherTests {
     #expect(relativePaths(watcher.sessionFiles, root: root) == ["hash-a/startup.session"])
   }
 
+  @Test("start waits for daemon directory without touching MainActor from timer queue")
+  func startWaitsForMissingDirectory() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let watcher = DaemonWatcher(daemonDirectory: root)
+    watcher.start()
+    defer { watcher.stop() }
+
+    #expect(watcher.sessionFiles.isEmpty)
+
+    _ = try writeFile("{}", at: root, components: ["hash-a", "created-later.session"])
+
+    let deadline = Date().addingTimeInterval(4)
+    while watcher.sessionFiles.isEmpty && Date() < deadline {
+      try await Task.sleep(for: .milliseconds(100))
+    }
+
+    #expect(relativePaths(watcher.sessionFiles, root: root) == ["hash-a/created-later.session"])
+  }
+
   private func temporaryDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
       .appendingPathComponent(UUID().uuidString, isDirectory: true)

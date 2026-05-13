@@ -8,11 +8,7 @@ struct SafeModeBlockedError: LocalizedError {
 
 extension ExpandedSessionView {
   func initializeInteractionState() {
-    guard !safeMode, UserDefaults.standard.bool(forKey: "expandedInteractionEnabled") else {
-      return
-    }
-    appState.authorizeBrowserControl(for: session)
-    interactionEnabled = true
+    interactionEnabled = appState.isBrowserControlAuthorized(for: session)
   }
 
   var sessionSafeModeEnabled: Bool {
