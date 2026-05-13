@@ -18,6 +18,7 @@ struct PointerCaptureView: NSViewRepresentable {
     nsView.onClick = onClick
     nsView.onScroll = onScroll
     nsView.onKeyPress = onKeyPress
+    nsView.becomeKeyboardCaptureIfPossible()
   }
 
   final class CaptureNSView: NSView {
@@ -52,12 +53,18 @@ struct PointerCaptureView: NSViewRepresentable {
       true
     }
 
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      becomeKeyboardCaptureIfPossible()
+    }
+
     override func mouseDown(with event: NSEvent) {
-      window?.makeFirstResponder(self)
+      becomeKeyboardCaptureIfPossible()
       onClick?(convert(event.locationInWindow, from: nil))
     }
 
     override func scrollWheel(with event: NSEvent) {
+      becomeKeyboardCaptureIfPossible()
       onScroll?(
         convert(event.locationInWindow, from: nil), event.scrollingDeltaX, event.scrollingDeltaY)
     }
@@ -68,6 +75,11 @@ struct PointerCaptureView: NSViewRepresentable {
         return
       }
       onKeyPress?(input)
+    }
+
+    func becomeKeyboardCaptureIfPossible() {
+      guard let window, window.firstResponder !== self else { return }
+      window.makeFirstResponder(self)
     }
   }
 }
