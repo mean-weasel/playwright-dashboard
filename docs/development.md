@@ -141,6 +141,7 @@ RUN_RECORDING_EXPORT_SMOKE=1 make smoke-recording-export
 RUN_SAFE_MODE_OBSERVER_SMOKE=1 make smoke-safe-mode-observer
 RUN_PLAYWRIGHT_CLI_MULTI_SMOKE=1 make smoke-playwright-cli-multi-session
 RUN_PLAYWRIGHT_CLI_DASHBOARD_ACTIONS_SMOKE=1 make smoke-playwright-cli-dashboard-actions
+RUN_REALISTIC_E2E_SMOKE=1 make smoke-realistic-e2e
 VISUAL_SNAPSHOT_DIR=dist/visual-snapshots make visual-snapshots
 ```
 
@@ -198,6 +199,26 @@ RSS+CPU stay within a reasonable cap. Tunable via `MANY_SESSION_COUNT`,
 ```sh
 RUN_MANY_SESSION_SMOKE=1 make smoke-many-sessions
 ```
+
+The realistic E2E/demo smoke uses the static Operator Workbench fixture in
+`fixtures/e2e-apps/operator-workbench`. It opens an isolated real
+`playwright-cli` Chrome session, launches the packaged app in Safe mode against
+an isolated daemon directory, captures Dashboard artifacts, and drives realistic
+fixture route changes. It is intended as local proof and future docs-media
+source material before becoming a required CI gate.
+
+```sh
+RUN_REALISTIC_E2E_SMOKE=1 SMOKE_ARTIFACT_DIR=dist/realistic-e2e-artifacts make smoke-realistic-e2e
+DEMO_MEDIA_FROM_EXISTING=1 make demo-media
+```
+
+`make smoke-realistic-e2e` writes `progress.log`, `expanded-ready.json`,
+`ui-snapshot.txt`, `scenario.json`, and `dashboard-window.png` to
+`SMOKE_ARTIFACT_DIR` (default `dist/realistic-e2e-artifacts`). `make demo-media`
+promotes those artifacts into `dist/docs-media/operator-workbench` with
+`manifest.json` and `summary.md`; see `docs/realistic-e2e-media-plan.md`.
+Generated media under `dist/` is ignored and should not be committed without
+explicit approval.
 
 To mirror the required CI surface locally with one target, use `make smoke-all`:
 
@@ -304,6 +325,19 @@ change. Scheduled CI also runs the exploratory expanded-view GUI smoke jobs, but
 those jobs are non-blocking because macOS runner input delivery can be flaky;
 manual dispatch keeps those optional smoke jobs strict. The separate `GUI Smoke`
 workflow can manually run the full GUI smoke suite and upload artifacts.
+
+The realistic E2E/demo smoke should stay local-only until it has passed repeated
+local runs and one or more strict manual GUI Smoke workflow runs without
+fixture-runner changes. Promote it in stages:
+
+1. Add it to the manual `GUI Smoke` workflow with artifact upload.
+2. Run it on scheduled CI as non-blocking for at least one week.
+3. Make it required only after the failure rate is comparable to the existing
+   required Playwright CLI smoke jobs and artifact output is useful for
+   debugging failures.
+
+Do not use the realistic smoke to implement or deploy GitHub Pages. Pages work
+belongs in a later tranche after the media pipeline is stable.
 
 ## Local PR Checklist
 
