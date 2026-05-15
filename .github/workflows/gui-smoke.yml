@@ -15,6 +15,7 @@ on:
           - multi
           - safe-observer
           - cli-multi
+          - realistic
           - both
           - all
 
@@ -47,7 +48,7 @@ jobs:
           fi
 
       - name: Install Playwright CLI
-        if: inputs.mode == 'cli-multi' || inputs.mode == 'all'
+        if: inputs.mode == 'cli-multi' || inputs.mode == 'realistic' || inputs.mode == 'all'
         run: npm install -g "@playwright/cli@${PLAYWRIGHT_CLI_VERSION}"
 
       - name: Run expanded interaction smoke
@@ -93,6 +94,21 @@ jobs:
         if: inputs.mode == 'cli-multi' || inputs.mode == 'all'
         run: make smoke-playwright-cli-multi-session
 
+      - name: Run realistic E2E demo smoke
+        env:
+          RUN_REALISTIC_E2E_SMOKE: "1"
+          SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/dist/realistic-e2e-artifacts
+        if: inputs.mode == 'realistic' || inputs.mode == 'all'
+        run: make smoke-realistic-e2e
+
+      - name: Collect realistic demo media
+        env:
+          DEMO_MEDIA_FROM_EXISTING: "1"
+          REALISTIC_E2E_ARTIFACT_DIR: ${{ github.workspace }}/dist/realistic-e2e-artifacts
+          DEMO_MEDIA_DIR: ${{ github.workspace }}/dist/docs-media/operator-workbench
+        if: inputs.mode == 'realistic' || inputs.mode == 'all'
+        run: make demo-media
+
       - name: Collect recording export artifacts
         if: always()
         run: |
@@ -109,5 +125,7 @@ jobs:
           name: gui-smoke-artifacts
           path: |
             dist/gui-smoke-artifacts/**
+            dist/realistic-e2e-artifacts/**
+            dist/docs-media/operator-workbench/**
             dist/PlaywrightDashboard.zip
           if-no-files-found: ignore
