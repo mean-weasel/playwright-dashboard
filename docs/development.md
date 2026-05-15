@@ -326,12 +326,11 @@ those jobs are non-blocking because macOS runner input delivery can be flaky;
 manual dispatch keeps those optional smoke jobs strict. The separate `GUI Smoke`
 workflow can manually run the full GUI smoke suite and upload artifacts.
 
-The realistic E2E/demo smoke should stay local-only until it has passed repeated
-local runs and one or more strict manual GUI Smoke workflow runs without
-fixture-runner changes. Promote it in stages:
+The realistic E2E/demo smoke has a manual `GUI Smoke` mode and runs on scheduled
+CI as non-blocking telemetry. Promote it in stages:
 
-1. Add it to the manual `GUI Smoke` workflow with artifact upload.
-2. Run it on scheduled CI as non-blocking for at least one week.
+1. Done: add it to the manual `GUI Smoke` workflow with artifact upload.
+2. In progress: run it on scheduled CI as non-blocking for at least one week.
 3. Make it required only after the failure rate is comparable to the existing
    required Playwright CLI smoke jobs and artifact output is useful for
    debugging failures.
