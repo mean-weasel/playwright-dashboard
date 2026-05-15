@@ -1,4 +1,4 @@
-.PHONY: build test coverage lint file-size mockups package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-playwright-cli-dashboard-actions smoke-playwright-cli-multi-target smoke-playwright-cli-recording smoke-playwright-cli-interaction smoke-realistic-e2e demo-media smoke-many-sessions smoke-reliability smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
+.PHONY: build test coverage lint file-size mockups docs-site package sign-package validate-package validate-smoke-package beta-release developer-id-package notarize-package staple-package notarized-release check-accessibility smoke-app smoke-login-item smoke-live-cdp smoke-expanded-interaction smoke-expanded-fallback smoke-recording-export smoke-multi-session smoke-safe-mode-observer smoke-playwright-cli-multi-session smoke-playwright-cli-dashboard-actions smoke-playwright-cli-multi-target smoke-playwright-cli-recording smoke-playwright-cli-interaction smoke-realistic-e2e demo-media smoke-many-sessions smoke-reliability smoke-release-launch smoke-all smoke-all-extended visual-snapshots visual-structure-smoke visual-snapshot-baseline visual-snapshot-compare visual-snapshot-enforce install clean qa
 
 APP_NAME := PlaywrightDashboard
 BUNDLE_ID ?= com.neonwatty.PlaywrightDashboard
@@ -57,6 +57,9 @@ mockups:
 		fi; \
 	done
 	@echo "Mockup HTML files are present and structurally complete"
+
+docs-site:
+	scripts/validate_docs_site.mjs
 
 $(PACKAGE_BUNDLE): build
 	rm -rf $(PACKAGE_BUNDLE)

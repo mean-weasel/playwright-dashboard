@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Playwright Dashboard</title>
+    <meta
+      name="description"
+      content="A native macOS menu bar dashboard for observing local playwright-cli browser sessions."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="Playwright Dashboard home">
+        <span class="brand-mark">PD</span>
+        <span>Playwright Dashboard</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="docs.html">Docs</a>
+        <a href="media.html">Media</a>
+        <a href="https://github.com/mean-weasel/playwright-dashboard/releases/latest">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Native macOS menu bar app</p>
+          <h1>Playwright Dashboard</h1>
+          <p class="lede">
+            Discover, observe, record, and safely inspect local
+            <code>playwright-cli</code> browser sessions without shipping session data
+            off your machine.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/mean-weasel/playwright-dashboard/releases/latest">
+              Download latest
+            </a>
+            <a class="button secondary" href="docs.html">Read the docs</a>
+          </div>
+        </div>
+        <div class="product-frame" aria-label="Dashboard preview">
+          <div class="window-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="dashboard-preview">
+            <aside>
+              <strong>Sessions</strong>
+              <span class="active">All open</span>
+              <span>Idle</span>
+              <span>Closed</span>
+              <span>Settings</span>
+            </aside>
+            <section>
+              <div class="preview-toolbar">
+                <strong>Operator Workbench</strong>
+                <span class="safe-badge">Safe</span>
+              </div>
+              <div class="session-grid">
+                <article>
+                  <span class="status live"></span>
+                  <strong>incident-detail</strong>
+                  <p>Live screencast, metadata, target picker</p>
+                </article>
+                <article>
+                  <span class="status"></span>
+                  <strong>runbook-review</strong>
+                  <p>Recording frames and local export</p>
+                </article>
+                <article>
+                  <span class="status warn"></span>
+                  <strong>closed-history</strong>
+                  <p>Search, stale state, persisted ordering</p>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-band" aria-label="Core features">
+        <article>
+          <h2>Local discovery</h2>
+          <p>
+            Watches the Playwright daemon cache for nested session files and
+            shows active and closed sessions in one dashboard.
+          </p>
+        </article>
+        <article>
+          <h2>Safe by default</h2>
+          <p>
+            Safe mode allows observation, screenshots, diagnostics, and
+            recordings while blocking close, navigation, CDP inspector, and
+            forwarded input.
+          </p>
+        </article>
+        <article>
+          <h2>Useful recordings</h2>
+          <p>
+            Capture local frames and export MP4 recordings from expanded
+            sessions for debugging, demos, and handoffs.
+          </p>
+        </article>
+      </section>
+
+      <section class="split-section">
+        <div>
+          <h2>Built for real headed workflows</h2>
+          <p>
+            The test harness now includes a realistic Operator Workbench fixture
+            with navigation, modal review, validation, scrollable runbooks, and
+            dynamic visual state for media capture.
+          </p>
+        </div>
+        <div class="checklist">
+          <span>Safe-mode observer smoke</span>
+          <span>Real playwright-cli multi-session smoke</span>
+          <span>Recording, target switching, and input smoke</span>
+          <span>Scheduled realistic E2E telemetry</span>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Local-only by design.</span>
+      <a href="https://github.com/mean-weasel/playwright-dashboard">GitHub</a>
+      <a href="docs.html">Documentation</a>
+      <a href="media.html">Demo media</a>
+    </footer>
+  </body>
+</html>
