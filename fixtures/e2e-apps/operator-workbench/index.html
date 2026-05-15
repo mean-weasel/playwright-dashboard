@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Operator Workbench</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Northstar Release Ops</p>
+        <h1>Operator Workbench</h1>
+      </div>
+      <nav aria-label="Primary">
+        <a href="#queue" data-route-link="queue">Queue</a>
+        <a href="#incident-alpha" data-route-link="incident-alpha">Incident</a>
+        <a href="#runbook" data-route-link="runbook">Runbook</a>
+      </nav>
+      <output id="pulse-output" class="pulse-output" aria-live="polite">Frame 0</output>
+    </header>
+
+    <main>
+      <section id="queue" class="route is-active" data-route="queue">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live queue</p>
+            <h2>Deployments needing attention</h2>
+          </div>
+          <button id="open-review" type="button">Open review drawer</button>
+        </div>
+
+        <section class="metrics" aria-label="Operational metrics">
+          <article class="metric-card">
+            <span>Queued checks</span>
+            <strong id="queued-count">18</strong>
+            <div class="meter"><span style="width: 72%"></span></div>
+          </article>
+          <article class="metric-card">
+            <span>Error budget</span>
+            <strong>94.2%</strong>
+            <div class="meter is-good"><span style="width: 94%"></span></div>
+          </article>
+          <article class="metric-card">
+            <span>Blocked regions</span>
+            <strong>2</strong>
+            <div class="meter is-alert"><span style="width: 38%"></span></div>
+          </article>
+        </section>
+
+        <section class="work-grid" aria-label="Work items">
+          <article class="work-card is-selected" tabindex="0">
+            <span class="status is-critical">Critical</span>
+            <h3>Checkout latency spike</h3>
+            <p>Payment authorization p95 crossed the release guardrail in two regions.</p>
+            <a href="#incident-alpha">Inspect incident</a>
+          </article>
+          <article class="work-card" tabindex="0">
+            <span class="status is-watch">Watch</span>
+            <h3>Search index migration</h3>
+            <p>Backfill is healthy, but queue depth is close to the alert threshold.</p>
+            <a href="#runbook">Open runbook</a>
+          </article>
+          <article class="work-card" tabindex="0">
+            <span class="status is-ok">Ready</span>
+            <h3>Admin UI release</h3>
+            <p>Verification passed. Waiting for operator approval before rollout.</p>
+            <button type="button" class="secondary-action" data-approve>Approve</button>
+          </article>
+        </section>
+      </section>
+
+      <section id="incident-alpha" class="route" data-route="incident-alpha">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Incident detail</p>
+            <h2>Checkout latency spike</h2>
+          </div>
+          <a class="button-link" href="#queue">Back to queue</a>
+        </div>
+
+        <div class="detail-layout">
+          <section class="panel">
+            <h3>Timeline</h3>
+            <ol class="timeline" id="timeline">
+              <li><time>09:12</time><span>Release candidate entered 25% canary.</span></li>
+              <li><time>09:17</time><span>Checkout p95 crossed 800 ms in us-west.</span></li>
+              <li><time>09:22</time><span>Fraud service retries increased by 19%.</span></li>
+              <li><time>09:30</time><span>Rollback recommendation generated.</span></li>
+              <li><time>09:36</time><span>Operator review requested for checkout team.</span></li>
+              <li><time>09:43</time><span>Synthetic probes remain green in eu-central.</span></li>
+              <li><time>09:51</time><span>Support volume is elevated but stable.</span></li>
+            </ol>
+          </section>
+
+          <aside class="panel">
+            <h3>Escalate</h3>
+            <form id="escalation-form" novalidate>
+              <label>
+                Owner
+                <input id="owner" name="owner" autocomplete="off" placeholder="release captain">
+              </label>
+              <label>
+                Reason
+                <textarea id="reason" name="reason" rows="4" placeholder="Describe the blocker"></textarea>
+              </label>
+              <button type="submit">Send escalation</button>
+              <p id="form-message" class="form-message" role="status"></p>
+            </form>
+          </aside>
+        </div>
+      </section>
+
+      <section id="runbook" class="route" data-route="runbook">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Runbook</p>
+            <h2>Canary release recovery</h2>
+          </div>
+          <a class="button-link" href="#queue">Back to queue</a>
+        </div>
+
+        <article class="runbook panel">
+          <h3>Decision checklist</h3>
+          <p>Use this runbook when a canary reports degraded latency but the error rate is still within the release budget.</p>
+          <ul>
+            <li>Confirm the canary cohort and affected regions.</li>
+            <li>Compare live service metrics with synthetic probes.</li>
+            <li>Check recent dependency changes and feature flags.</li>
+            <li>Hold the rollout before increasing traffic.</li>
+            <li>Escalate if p95 remains above guardrail for two windows.</li>
+          </ul>
+          <div class="scroll-lab" tabindex="0">
+            <p>Scrollable audit feed</p>
+            <p>09:14 cache warmup complete</p>
+            <p>09:16 checkout retry policy updated</p>
+            <p>09:19 fraud dependency alert acknowledged</p>
+            <p>09:24 canary cohort held at 25%</p>
+            <p>09:29 rollback plan staged</p>
+            <p>09:35 operator review requested</p>
+            <p>09:42 customer impact estimate refreshed</p>
+            <p>09:47 release captain notified</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="review-dialog" aria-labelledby="review-title">
+      <form method="dialog">
+        <h2 id="review-title">Release review drawer</h2>
+        <p>Three work items need attention before the next rollout window.</p>
+        <div class="review-list">
+          <label><input type="checkbox" checked> Checkout incident assigned</label>
+          <label><input type="checkbox"> Search migration reviewed</label>
+          <label><input type="checkbox"> Admin release approved</label>
+        </div>
+        <menu>
+          <button value="cancel">Close</button>
+          <button id="confirm-review" value="default">Mark reviewed</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
