@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Demo Media - Playwright Dashboard</title>
+    <meta name="description" content="Demo media plan and reproducible capture path for Playwright Dashboard.">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html">
+        <span class="brand-mark">PD</span>
+        <span>Playwright Dashboard</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="docs.html">Docs</a>
+        <a href="media.html" aria-current="page">Media</a>
+        <a href="https://github.com/mean-weasel/playwright-dashboard/releases/latest">Download</a>
+      </nav>
+    </header>
+
+    <main class="content-page">
+      <section class="page-heading">
+        <p class="eyebrow">Reproducible demos</p>
+        <h1>Operator Workbench media pipeline</h1>
+        <p>
+          Demo screenshots and recordings are generated from the realistic local
+          E2E fixture, not private user sessions. Generated binaries stay out of
+          the repository until explicitly curated.
+        </p>
+      </section>
+
+      <section class="media-layout">
+        <div class="media-card">
+          <div class="media-placeholder">
+            <span>dashboard-window.png</span>
+          </div>
+          <h2>Primary dashboard screenshot</h2>
+          <p>
+            Produced by <code>RUN_REALISTIC_E2E_SMOKE=1 make smoke-realistic-e2e</code>
+            and promoted by <code>make demo-media</code>.
+          </p>
+        </div>
+        <div class="media-card">
+          <div class="media-placeholder accent">
+            <span>recording.mp4</span>
+          </div>
+          <h2>Workflow recording</h2>
+          <p>
+            Planned capture for navigation, validation, scrolling, expanded view
+            recording, and exported MP4 review.
+          </p>
+        </div>
+      </section>
+
+      <section class="command-panel">
+        <h2>Local capture commands</h2>
+        <pre><code>RUN_REALISTIC_E2E_SMOKE=1 SMOKE_ARTIFACT_DIR=dist/realistic-e2e-artifacts make smoke-realistic-e2e
+DEMO_MEDIA_FROM_EXISTING=1 make demo-media</code></pre>
+        <p>
+          See the full plan in
+          <a href="https://github.com/mean-weasel/playwright-dashboard/blob/main/docs/realistic-e2e-media-plan.md">
+            docs/realistic-e2e-media-plan.md
+          </a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>Generated media is reviewed before it is committed.</span>
+      <a href="index.html">Home</a>
+      <a href="docs.html">Docs</a>
+    </footer>
+  </body>
+</html>
