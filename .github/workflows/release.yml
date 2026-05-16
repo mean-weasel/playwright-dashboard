@@ -154,7 +154,7 @@ jobs:
           METADATA
 
       - name: Upload pre-notarization signed zip
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: signed-app-prestaple
           path: |
@@ -318,7 +318,7 @@ jobs:
           shasum -a 256 "dist/$ARTIFACT_NAME" > "dist/$ARTIFACT_NAME.sha256"
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ steps.metadata.outputs.artifact_name }}
           path: |
