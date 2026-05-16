@@ -33,13 +33,16 @@
 
       <section class="media-layout">
         <div class="media-card">
-          <div class="media-placeholder">
-            <span>dashboard-window.png</span>
-          </div>
+          <img
+            class="media-image"
+            src="assets/operator-workbench-dashboard.png"
+            alt="Curated Operator Workbench screenshot captured from the realistic E2E smoke"
+          >
           <h2>Primary dashboard screenshot</h2>
           <p>
             Produced by <code>RUN_REALISTIC_E2E_SMOKE=1 make smoke-realistic-e2e</code>
-            and promoted by <code>make demo-media</code>.
+            and promoted by <code>make demo-media</code>. The published crop removes
+            local paths, ports, and session identifiers from the raw artifact.
           </p>
         </div>
         <div class="media-card">

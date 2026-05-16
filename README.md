@@ -6,6 +6,8 @@ and interacting with local Playwright browser sessions. It watches
 `playwright-cli`, shows active and closed sessions in a dashboard, and can open an
 expanded session view backed by CDP screencast or screenshot fallback.
 
+Project site and docs: <https://mean-weasel.github.io/playwright-dashboard/>
+
 ## Requirements
 
 - macOS 15 or newer.
