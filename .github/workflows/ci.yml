@@ -34,6 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -1193,11 +1194,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Download smoke results
         if: always()
-        uses: actions/download-artifact@v8.0.1
-        with:
-          path: smoke-results
-          pattern: smoke-results-*
-          merge-multiple: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p smoke-results
+          artifact_names="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --paginate --jq '.artifacts[].name | select(startswith("smoke-results-"))')"
+          if [ -z "$artifact_names" ]; then
+            echo "No smoke result artifacts found."
+            exit 0
+          fi
+          while IFS= read -r artifact_name; do
+            [ -n "$artifact_name" ] || continue
+            echo "Downloading $artifact_name"
+            gh run download "$GITHUB_RUN_ID" --name "$artifact_name" --dir "smoke-results/$artifact_name"
+          done <<< "$artifact_names"
       - name: Smoke flake + retry summary
         if: always()
         continue-on-error: true
