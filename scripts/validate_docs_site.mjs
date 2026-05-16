@@ -29,17 +29,18 @@ for (const relative of htmlFiles) {
     }
   }
 
-  const localLinks = [...html.matchAll(/href="([^"#][^"]*)"/g)]
-    .map((match) => match[1])
-    .filter((href) => !href.startsWith("http") && !href.startsWith("mailto:"));
-  for (const href of localLinks) {
-    const targetPath = href.split("#")[0];
+  const localTargets = [
+    ...[...html.matchAll(/href="([^"#][^"]*)"/g)].map((match) => match[1]),
+    ...[...html.matchAll(/src="([^"#][^"]*)"/g)].map((match) => match[1]),
+  ].filter((target) => !target.startsWith("http") && !target.startsWith("mailto:"));
+  for (const targetRef of localTargets) {
+    const targetPath = targetRef.split("#")[0];
     if (!targetPath || targetPath === "./") {
       continue;
     }
     const target = path.join(siteDir, targetPath);
     if (!fs.existsSync(target)) {
-      throw new Error(`site/${relative} links to missing local target: ${href}`);
+      throw new Error(`site/${relative} references missing local target: ${targetRef}`);
     }
   }
 }

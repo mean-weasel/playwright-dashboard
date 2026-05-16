@@ -180,101 +180,21 @@ h2 {
   background: #c3cbd4;
 }
 
-.dashboard-preview {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  min-height: 430px;
-}
-
-.dashboard-preview aside {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  border-right: 1px solid var(--line);
-  background: #f8fafc;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.dashboard-preview aside strong {
-  color: var(--ink);
-}
-
-.dashboard-preview aside span {
-  padding: 8px 10px;
-  border-radius: 7px;
-}
-
-.dashboard-preview aside .active {
-  background: #dcebe7;
-  color: var(--green);
-  font-weight: 700;
-}
-
-.dashboard-preview section {
-  padding: 22px;
-}
-
-.preview-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.safe-badge {
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: #dcebe7;
-  color: var(--green);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.session-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.session-grid article {
-  min-height: 210px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(22, 59, 87, 0.06)),
-    #ffffff;
-}
-
-.session-grid p {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.status {
+.dashboard-screenshot,
+.media-image {
   display: block;
   width: 100%;
-  height: 94px;
-  margin-bottom: 14px;
-  border-radius: 6px;
-  background:
-    linear-gradient(90deg, rgba(23, 33, 43, 0.14) 12%, transparent 12% 18%, rgba(23, 33, 43, 0.08) 18%),
-    #dfe7ee;
+  height: auto;
 }
 
-.status.live {
-  background:
-    linear-gradient(90deg, rgba(18, 113, 91, 0.18) 18%, transparent 18% 27%, rgba(18, 113, 91, 0.1) 27%),
-    #dcebe7;
+.dashboard-screenshot {
+  background: #ffffff;
 }
 
-.status.warn {
-  background:
-    linear-gradient(90deg, rgba(179, 107, 0, 0.2) 16%, transparent 16% 25%, rgba(179, 107, 0, 0.1) 25%),
-    #f3e6cf;
+.media-image {
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .feature-band,
@@ -431,19 +351,6 @@ footer a {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .dashboard-preview {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-preview aside {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .session-grid {
-    grid-template-columns: 1fr;
   }
 
   h1 {
