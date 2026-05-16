@@ -38,6 +38,7 @@ permissions:
   pull-requests: read
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PLAYWRIGHT_CLI_VERSION: 0.1.5
 
 jobs:
@@ -52,7 +53,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -1192,7 +1193,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Download smoke results
         if: always()
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: smoke-results
           pattern: smoke-results-*
